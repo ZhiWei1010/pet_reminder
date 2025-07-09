@@ -156,8 +156,6 @@ def main():
     
     # Sidebar for instructions
     with st.sidebar:
-        st.text(" ")
-        st.text(" ")
         if os.path.exists("BI-Logo.png"):
             icon_img = Image.open("BI-Logo.png")
             st.image(icon_img, width=100)
