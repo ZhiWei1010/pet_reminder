@@ -80,10 +80,16 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
     event.add_component(alarm)
     
     cal.add_component(event)
-    
+    print("-" * 10)
+    print("ICS FILE GENERATED: ")
+    print("-" * 10)
+    print(cal.to_ical().decode('utf-8'))
+
     return cal.to_ical().decode('utf-8')
 
 def generate_qr_code(calendar_data):
+
+
     """Generate QR code containing calendar data with optional BI icon"""
     qr = qrcode.QRCode(
         version=1,
@@ -148,6 +154,7 @@ def generate_qr_code(calendar_data):
     img_buffer.seek(0)
     
     return img_buffer.getvalue()
+
 
 def main():
     # Header
@@ -296,6 +303,21 @@ def main():
                             end_after_count=end_after_count,
                             notes=notes
                         )
+
+                        query_params = st.query_params()
+                        if "download" in query_params:
+                            ics_bytes = calendar_data.encode("utf-8")
+                            b64 = base64.b64encode(ics_bytes).decode()
+                            href = f'<a href="data:text/calendar;base64,{b64}" download="event.ics">Click here if download doesn’t start automatically</a>'
+                            st.markdown(href, unsafe_allow_html=True)
+                            st.markdown("""
+                                <script>
+                                window.onload = function(){
+                                    document.querySelector('a')?.click();
+                                }
+                                </script>
+                            """, unsafe_allow_html=True)
+                        st.stop()
                         
                         # Generate QR code
                         qr_image_bytes = generate_qr_code(calendar_data)

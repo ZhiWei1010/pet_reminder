@@ -68,7 +68,7 @@ if st.button("📲 Generate QR Code"):
     st.session_state.ics_generated = True
 
     # Since you're testing locally
-    base_url = "http://localhost:8501"
+    base_url = "https://pet-reminder-test.streamlit.app"
     download_url = f"{base_url}?{urlencode({'download': '1'})}"
     st.session_state.download_url = download_url
 
