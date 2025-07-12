@@ -452,26 +452,7 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
         
         <a href="{calendar_url}" class="btn btn-primary" download="{pet_name.upper()}_{product_name}_reminder.ics">
             📅 Add to My Calendar
-        </a>
-        
-        <div class="instructions">
-            <div class="instructions-title">📱 How to Use:</div>
-            
-            <div class="device-specific ios-instructions" style="display: none;">
-                <strong>iPhone/iPad:</strong><br>
-                • Tap "Add to My Calendar"<br>
-                • Select "Add All Events" when prompted<br>
-                • All {len(reminder_details['times'])} daily reminders will be saved!
-            </div>
-            
-            <div class="device-specific android-instructions" style="display: none;">
-                <strong>Android:</strong><br>
-                • Tap "Add to My Calendar"<br>
-                • Choose Google Calendar (recommended)<br>
-                • Select "Import" to add all reminders<br>
-                • Check your calendar for confirmation
-            </div>
-        </div>
+        </a>          
     </div>
 
     <script>
