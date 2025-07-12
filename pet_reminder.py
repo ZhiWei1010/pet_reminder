@@ -803,11 +803,11 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     # Add QR code
     img.paste(qr_img, (qr_x, qr_y))
     
-    # Instruction text below QR code - REMOVE EMOJI ICONS
+    # Instruction text below QR code
     instruction_y = qr_y + qr_size + 35
     instruction_lines = [
-        "Scan to add reminder",
-        "to your calendar"
+        "Scan using Mobile or long press",
+        "to add reminder to your calendar"
     ]
     
     for i, line in enumerate(instruction_lines):
