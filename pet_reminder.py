@@ -10,6 +10,7 @@ import os
 import urllib.parse
 import hashlib
 import boto3
+import math
 
 # Configure page with mobile optimization
 st.set_page_config(
@@ -33,6 +34,49 @@ s3_client = boto3.client(
 # Global counter for generating sequential IDs
 if 'pet_counter' not in st.session_state:
     st.session_state.pet_counter = 1
+
+def calculate_reminder_count(start_date, end_date, frequency, frequency_value=None):
+    """Calculate total number of reminders based on date range and frequency"""
+    if end_date < start_date:
+        return 0
+    
+    total_days = (end_date - start_date).days + 1  # Include both start and end dates
+    
+    if frequency == "Daily":
+        return total_days
+    elif frequency == "Weekly":
+        return math.ceil(total_days / 7)
+    elif frequency == "Monthly":
+        # Calculate months between dates
+        months = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+        # Add 1 if we haven't passed the start day in the end month
+        if end_date.day >= start_date.day:
+            months += 1
+        return max(1, months)
+    elif frequency == "Custom Days" and frequency_value:
+        return math.ceil(total_days / frequency_value)
+    
+    return 0
+
+def format_duration_text(start_date, end_date, reminder_count, frequency):
+    """Format duration text for display"""
+    total_days = (end_date - start_date).days + 1
+    
+    if total_days <= 7:
+        return f"{total_days} day{'s' if total_days > 1 else ''}"
+    elif total_days <= 31:
+        weeks = math.ceil(total_days / 7)
+        return f"≈ {weeks} week{'s' if weeks > 1 else ''}"
+    elif total_days <= 365:
+        months = math.ceil(total_days / 30)
+        return f"≈ {months} month{'s' if months > 1 else ''}"
+    else:
+        years = total_days / 365
+        if years >= 2:
+            return f"≈ {years:.1f} years"
+        else:
+            months = math.ceil(total_days / 30)
+            return f"≈ {months} months"
 
 def get_fallback_font(size):
     """Get the best available font for the system"""
@@ -108,8 +152,11 @@ def generate_meaningful_id(pet_name, product_name):
     
     return meaningful_id
 
-def create_calendar_reminder(pet_name, product_name, frequency, frequency_value, reminder_times, start_date, end_after_count=None, notes=""):
+def create_calendar_reminder(pet_name, product_name, frequency, frequency_value, reminder_times, start_date, end_date, notes=""):
     """Create ICS calendar content for recurring reminder with multiple times per day"""
+    
+    # Calculate reminder count for RRULE
+    reminder_count = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
     
     # Create calendar
     cal = Calendar()
@@ -140,7 +187,7 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
         event.add('dtstamp', datetime.now())
         event.add('uid', str(uuid.uuid4()))
         
-        # Add recurrence rule with optional end count
+        # Add recurrence rule with count limit
         rrule = {}
         
         if frequency == "Daily":
@@ -153,9 +200,9 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
             rrule['freq'] = 'daily'
             rrule['interval'] = int(frequency_value)
         
-        # Add count limit if specified
-        if end_after_count and end_after_count > 0:
-            rrule['count'] = int(end_after_count)
+        # Always add count limit based on date range
+        if reminder_count > 0:
+            rrule['count'] = reminder_count
         
         event.add('rrule', rrule)
         
@@ -476,8 +523,16 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
                 <span class="detail-value">{reminder_details['start_date']}</span>
             </div>
             <div class="detail-row">
+                <span class="detail-label">End Date:</span>
+                <span class="detail-value">{reminder_details['end_date']}</span>
+            </div>
+            <div class="detail-row">
                 <span class="detail-label">Duration:</span>
                 <span class="detail-value">{reminder_details['duration']}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Total Reminders:</span>
+                <span class="detail-value">{reminder_details['total_reminders']}</span>
             </div>
             
             <div class="times-section">
@@ -697,27 +752,25 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
         f" ",
         f"• Frequency: {frequency_text}",
         f"• Starts: {reminder_details['start_date']}",
+        f"• Ends: {reminder_details['end_date']}",
         f"• Duration: {reminder_details['duration']}",
+        f"• Total: {reminder_details['total_reminders']} reminders",
         f" "
     ]
     
     for i, detail in enumerate(details):
-        draw.text((left_x, details_y + i * 30), detail, fill=text_color, font=detail_font)
+        draw.text((left_x, details_y + i * 25), detail, fill=text_color, font=detail_font)
     
     # Times section (tighter spacing) - REPLACE ICON WITH TEXT
-    times_y = details_y + len(details) * 30 + 15  # Reduced spacing
+    times_y = details_y + len(details) * 25 + 15  # Reduced spacing
     draw.text((left_x, times_y), "Reminder Timings:", fill=accent_color, font=detail_font)
     
-    #for i, time_info in enumerate(reminder_details['times']):
-    #    time_text = f"• {time_info['time']} ({time_info['label']})"
-    #    draw.text((left_x + 20, times_y + 30 + i * 25), time_text, fill=text_color, font=small_font)
-        
     times_text = " / ".join([f"{t['time']} ({t['label']})" for t in reminder_details['times']])
     draw.text((left_x + 20, times_y + 30), f"{times_text}", fill=text_color, font=small_font)
     
     # Notes if present (tighter spacing) - REPLACE ICON WITH TEXT
     if reminder_details.get('notes') and reminder_details['notes'].strip():
-        notes_y = times_y + 30 + len(reminder_details['times']) * 25 + 15  # Tighter spacing
+        notes_y = times_y + 80  # Adjusted spacing for new layout
         draw.text((left_x, notes_y), "Additional Notes:", fill=accent_color, font=detail_font)
         
         # Wrap notes text
@@ -825,7 +878,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <img src="{logo_data_url}" style='width: 80px; height: 80px; object-fit: contain; margin-right: 20px;'>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder 🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333; font-size: 19px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;'>🐾 Pet Reminder 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -840,7 +893,7 @@ def main():
             <div style='width: 80px;'></div>
         </div>
         """, unsafe_allow_html=True)
-    
+        
     st.text("") 
     
     # Main form
@@ -876,14 +929,33 @@ def main():
         if product_name == "Other":
             product_name = st.text_input("Custom Product Name", placeholder="Enter product name")
         
-        # NEW: Start Date Selection
-        st.markdown("**📅 Start Date**")
-        start_date = st.date_input(
-            "When should reminders begin?",
-            value=date.today(),
-            min_value=date.today(),
-            help="Select the first day you want to receive reminders"
-        )
+        # Date Range Selection
+        st.markdown("**📅 Reminder Period**")
+        col_start, col_end = st.columns(2)
+        
+        with col_start:
+            start_date = st.date_input(
+                "Start Date",
+                value=date.today(),
+                min_value=date.today(),
+                help="First day of reminders"
+            )
+        
+        with col_end:
+            # Default end date to end of current year
+            current_year = date.today().year
+            default_end_date = date(current_year, 12, 31)
+            
+            end_date = st.date_input(
+                "End Date",
+                value=default_end_date,
+                min_value=date.today(),
+                help="Last day of reminders"
+            )
+        
+        # Validate date range
+        if end_date < start_date:
+            st.error("⚠️ End date must be on or after start date")
         
         frequency = st.selectbox("Reminder Frequency", ["Daily", "Weekly", "Monthly", "Custom Days"], index=0)
         
@@ -891,7 +963,17 @@ def main():
         if frequency == "Custom Days":
             frequency_value = st.number_input("Every X days", min_value=1, max_value=365, value=7)
         
-        # NEW: Multiple Times Per Day with Duration Limits
+        # Calculate and show reminder count
+        if start_date and end_date and end_date >= start_date:
+            reminder_count = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
+            duration_text = format_duration_text(start_date, end_date, reminder_count, frequency)
+            
+            if reminder_count > 0:
+                st.info(f"💡 This will create **{reminder_count} reminders** over {duration_text}")
+            else:
+                st.warning("⚠️ No reminders will be generated with these settings")
+        
+        # Multiple Times Per Day with Duration Limits
         st.markdown("**⏰ Reminder Times**")
         
         # Define time periods with their valid ranges
@@ -950,11 +1032,8 @@ def main():
                     key="afternoon_time"
                 )
                 selected_times.append({"time": afternoon_time, "label": "Afternoon"})
-            
-            
         
         with col_time2:
-            
             if st.checkbox("🌇 Evening", key="evening"):
                 evening_options = time_periods["Evening"]["options"]
                 default_idx = evening_options.index(time_periods["Evening"]["default"]) if time_periods["Evening"]["default"] in evening_options else 0
@@ -965,7 +1044,6 @@ def main():
                     key="evening_time"
                 )
                 selected_times.append({"time": evening_time, "label": "Evening"})
-                
                 
             if st.checkbox("🌙 Night", key="night"):
                 night_options = time_periods["Night"]["options"]
@@ -1002,25 +1080,6 @@ def main():
                 
                 selected_times.append({"time": custom_time.strftime("%H:%M"), "label": custom_label})
         
-        # Duration settings
-        end_type = st.radio("Duration", ["Continue indefinitely", "Stop after N occurrences"])
-        
-        end_after_count = None
-        if end_type == "Stop after N occurrences":
-            end_after_count = st.number_input("Number of reminders", min_value=1, max_value=1000, value=30)
-            
-            if frequency == "Monthly" and end_after_count:
-                months = end_after_count
-                years = months // 12
-                remaining_months = months % 12
-                if years > 0:
-                    duration_text = f"≈ {years} year{'s' if years > 1 else ''}"
-                    if remaining_months > 0:
-                        duration_text += f" and {remaining_months} month{'s' if remaining_months > 1 else ''}"
-                else:
-                    duration_text = f"≈ {remaining_months} month{'s' if remaining_months > 1 else ''}"
-                st.info(f"💡 {end_after_count} reminders = {duration_text}")
-        
         notes = st.text_area("Additional Notes (Optional)", placeholder="e.g., Give with food, Check for side effects")
         
         # Show selected times summary
@@ -1034,9 +1093,13 @@ def main():
         st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         
         if generate_button:
-            if pet_name and product_name and selected_times:
+            if pet_name and product_name and selected_times and end_date >= start_date:
                 with st.spinner("QR Reminder Card Generation in Progress...."):
                     try:
+                        # Calculate reminder count
+                        total_reminders = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
+                        duration_text = format_duration_text(start_date, end_date, total_reminders, frequency)
+                        
                         calendar_data = create_calendar_reminder(
                             pet_name=pet_name,
                             product_name=product_name,
@@ -1044,7 +1107,7 @@ def main():
                             frequency_value=frequency_value,
                             reminder_times=selected_times,
                             start_date=start_date,
-                            end_after_count=end_after_count,
+                            end_date=end_date,
                             notes=notes
                         )
                         
@@ -1055,7 +1118,9 @@ def main():
                             reminder_details = {
                                 'frequency': frequency,
                                 'start_date': start_date.strftime('%Y-%m-%d'),
-                                'duration': f"{end_after_count} occurrences" if end_after_count else "Continues indefinitely",
+                                'end_date': end_date.strftime('%Y-%m-%d'),
+                                'duration': duration_text,
+                                'total_reminders': total_reminders,
                                 'times': selected_times,
                                 'notes': notes
                             }
@@ -1080,16 +1145,13 @@ def main():
                                 # Display reminder card instead of QR code
                                 st.image(reminder_image_bytes, use_container_width=True)
                                 
-                                #st.success("✅ QR Reminder Card Generated Successfully!")
-                                
                                 with st.expander("📥 Download Options"):
-                                    # NEW: Download reminder Card with QR code
+                                    # Download reminder Card with QR code
                                     st.download_button(
                                         label="🖼️ Download Reminder Card (with QR Code)",
                                         data=reminder_image_bytes,
                                         file_name=f"{meaningful_id}_reminder_image.png",
                                         mime="image/png"
-                                        
                                     )
                                     
                                     st.download_button(
@@ -1118,21 +1180,18 @@ def main():
                                     st.write(f"**Pet:** {pet_name}")
                                     st.write(f"**Product:** {product_name}")
                                     st.write(f"**Start Date:** {start_date.strftime('%Y-%m-%d')}")
+                                    st.write(f"**End Date:** {end_date.strftime('%Y-%m-%d')}")
                                     st.write(f"**Frequency:** {frequency}")
                                     if frequency_value:
                                         st.write(f"**Every:** {frequency_value} days")
+                                    st.write(f"**Duration:** {duration_text}")
+                                    st.write(f"**Total Reminders:** {total_reminders}")
                                     st.write(f"**Times per day:** {len(selected_times)}")
                                     for time_info in selected_times:
                                         st.write(f"  • {time_info['time']} - {time_info['label']}")
-                                    if end_after_count:
-                                        st.write(f"**Total Reminders:** {end_after_count}")
-                                        st.write(f"**Will Stop After:** {end_after_count} occurrences")
-                                    else:
-                                        st.write(f"**Duration:** Continues indefinitely")
                                     if notes:
                                         st.write(f"**Notes:** {notes}")
                                                                 
-                                    
                             else:
                                 st.error("❌ Failed to create web page - check S3 permissions")
                         else:
@@ -1142,6 +1201,8 @@ def main():
                         st.error(f"Error generating QR code: {str(e)}")
             elif not selected_times:
                 st.warning("⚠️ Please select at least one reminder time")
+            elif end_date < start_date:
+                st.warning("⚠️ End date must be on or after start date")
             else:
                 st.warning("⚠️ Please fill in Pet Name and Product Name")
         else:
