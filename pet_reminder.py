@@ -1077,15 +1077,10 @@ def main():
                                 # Upload reminder image to S3
                                 reminder_image_url = upload_reminder_image_to_s3(reminder_image_bytes, meaningful_id)
                                 
-                                col_qr1, col_qr2, col_qr3 = st.columns([0.3, 1, 0.3])
-                                with col_qr2:
-                                    st.image(qr_image_bytes, width=250)
+                                # Display reminder card instead of QR code
+                                st.image(reminder_image_bytes, use_container_width=True)
                                 
                                 st.success("✅ QR Code Generated Successfully!")
-                                
-                                with st.expander("🖼️ Preview Reminder Card"):
-                                    st.image(reminder_image_bytes, use_container_width=True)
-                                    #st.info("💡 This image contains all reminder details and can be printed, shared, or saved to your phone!")
                                 
                                 with st.expander("📥 Download Options"):
                                     # NEW: Download reminder Card with QR code
