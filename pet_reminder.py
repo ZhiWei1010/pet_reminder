@@ -1145,7 +1145,7 @@ def main():
             else:
                 st.warning("⚠️ Please fill in Pet Name and Product Name")
         else:
-            st.info("👈 Fill the form and click 'Generate QR Code'")
+            st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
 
 if __name__ == "__main__":
     main()
