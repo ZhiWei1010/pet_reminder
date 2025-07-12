@@ -236,7 +236,7 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
         }}
         
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             margin: 0;
             padding: 20px;
             background: #08312a;
@@ -590,6 +590,7 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     bg_color = (8, 49, 42)  # #08312a
     accent_color = (0, 228, 124)  # #00e47c
     text_color = (255, 255, 255)  # white
+    light_accent = (0, 228, 124, 40)  # Semi-transparent accent
     
     # Create image with high quality
     img = Image.new('RGB', (width, height), bg_color)
@@ -603,7 +604,7 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
         detail_font = get_fallback_font(20)
         small_font = get_fallback_font(18)
     except Exception as e:
-        # Ultimate fallback - use default font with different sizes by scaling
+        # Ultimate fallback - use default font
         base_font = ImageFont.load_default()
         large_font = base_font
         title_font = base_font
@@ -623,89 +624,109 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     border_width = 8
     draw.rectangle([0, 0, width-1, height-1], outline=accent_color, width=border_width)
     
-    # Draw BI Logo at top left corner
-    logo_size = 120
+    # Draw BI Logo at top left corner (BIGGER and better handling)
+    logo_size = 172  # Increased from 70 to 120
     logo_x = 30
     logo_y = 30
     
     logo_drawn = False
+    if os.path.exists("BI-Logo-2.png"):
+        try:
+            logo_img = Image.open("BI-Logo-2.png")
+            # Use thumbnail to maintain aspect ratio properly
+            logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
+            actual_w, actual_h = logo_img.size
+            
+            # Center the logo in the allocated space if it's smaller
+            center_x = logo_x + (logo_size - actual_w) // 2
+            center_y = logo_y + (logo_size - actual_h) // 2
+            
+            if logo_img.mode == 'RGBA':
+                img.paste(logo_img, (center_x, center_y), logo_img)
+            else:
+                img.paste(logo_img, (center_x, center_y))
+            logo_drawn = True
+        except Exception as e:
+            print(f"Error loading BI-Logo-2.png: {e}")
+            pass
     
-    # Try both logo files
-    for logo_file in ["BI-Logo-2.png", "BI-Logo.png"]:
-        if os.path.exists(logo_file):
-            try:
-                logo_img = Image.open(logo_file)
-                # Use thumbnail to maintain aspect ratio properly
-                logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
-                actual_w, actual_h = logo_img.size
-                
-                # Center the logo in the allocated space if it's smaller
-                center_x = logo_x + (logo_size - actual_w) // 2
-                center_y = logo_y + (logo_size - actual_h) // 2
-                
-                if logo_img.mode == 'RGBA':
-                    img.paste(logo_img, (center_x, center_y), logo_img)
-                else:
-                    img.paste(logo_img, (center_x, center_y))
-                logo_drawn = True
-                break
-            except Exception as e:
-                continue
+    if not logo_drawn and os.path.exists("BI-Logo.png"):
+        try:
+            logo_img = Image.open("BI-Logo.png")
+            logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
+            actual_w, actual_h = logo_img.size
+            
+            center_x = logo_x + (logo_size - actual_w) // 2
+            center_y = logo_y + (logo_size - actual_h) // 2
+            
+            if logo_img.mode == 'RGBA':
+                img.paste(logo_img, (center_x, center_y), logo_img)
+            else:
+                img.paste(logo_img, (center_x, center_y))
+            logo_drawn = True
+        except Exception as e:
+            print(f"Error loading BI-Logo.png: {e}")
+            pass
     
     if not logo_drawn:
-        # Fallback: draw simple text instead
+        # Fallback: draw simple text instead of emoji
         draw.text((logo_x, logo_y), "BI", fill=accent_color, font=large_font)
     
-    # LEFT SIDE: Pet info and details
+    # LEFT SIDE: Pet info and details (REDUCED SPACING)
+    left_section_width = width // 2 - 50
     left_x = 60
     
-    # Pet name
-    pet_y = 180
+    # Pet name (move up to reduce space)
+    pet_y = 180  # Reduced from higher value
     draw.text((left_x, pet_y), pet_name.upper(), fill=accent_color, font=large_font)
     
-    # Product name
-    product_y = pet_y + 60
-    draw.text((left_x, product_y), f"({product_name})", fill=text_color, font=title_font)
+    # Product name (tighter spacing)
+    product_y = pet_y + 60  # Reduced spacing
+    draw.text((left_x, product_y), '('+product_name+')', fill=text_color, font=title_font)
     
-    # Details section
-    details_y = product_y + 70
+    # Details section (tighter spacing) - REPLACE ICONS WITH TEXT SYMBOLS
+    details_y = product_y + 60  # Reduced spacing
     
     # Format frequency better
     frequency_text = reminder_details['frequency']
     if reminder_details['frequency'] == 'Custom Days':
         frequency_text = f"Every {reminder_details.get('frequency_value', 'X')} days"
     
+    
     details = [
-        f"Frequency: {frequency_text}",
-        f"Starts: {reminder_details['start_date']}",
-        f"Duration: {reminder_details['duration']}",
-        ""
+        f" ",
+        f"• Frequency: {frequency_text}",
+        f"• Starts: {reminder_details['start_date']}",
+        f"• Duration: {reminder_details['duration']}",
+        f" "
     ]
     
     for i, detail in enumerate(details):
-        if detail:  # Skip empty lines
-            draw.text((left_x, details_y + i * 35), f"• {detail}", fill=text_color, font=detail_font)
+        draw.text((left_x, details_y + i * 30), detail, fill=text_color, font=detail_font)
     
-    # Times section
-    times_y = details_y + len(details) * 35 + 20
-    draw.text((left_x, times_y), "Reminder Times:", fill=accent_color, font=detail_font)
+    # Times section (tighter spacing) - REPLACE ICON WITH TEXT
+    times_y = details_y + len(details) * 30 + 15  # Reduced spacing
+    draw.text((left_x, times_y), "Reminder Timings:", fill=accent_color, font=detail_font)
     
-    # Format times in a more compact way
+    #for i, time_info in enumerate(reminder_details['times']):
+    #    time_text = f"• {time_info['time']} ({time_info['label']})"
+    #    draw.text((left_x + 20, times_y + 30 + i * 25), time_text, fill=text_color, font=small_font)
+        
     times_text = " / ".join([f"{t['time']} ({t['label']})" for t in reminder_details['times']])
-    draw.text((left_x + 20, times_y + 35), times_text, fill=text_color, font=small_font)
+    draw.text((left_x + 20, times_y + 30), f"{times_text}", fill=text_color, font=small_font)
     
-    # Notes if present
+    # Notes if present (tighter spacing) - REPLACE ICON WITH TEXT
     if reminder_details.get('notes') and reminder_details['notes'].strip():
-        notes_y = times_y + 80
-        draw.text((left_x, notes_y), "Notes:", fill=accent_color, font=detail_font)
+        notes_y = times_y + 30 + len(reminder_details['times']) * 25 + 15  # Tighter spacing
+        draw.text((left_x, notes_y), "Additional Notes:", fill=accent_color, font=detail_font)
         
         # Wrap notes text
         notes_text = reminder_details['notes']
-        max_chars = 50
+        max_chars = 40
         if len(notes_text) > max_chars:
             notes_text = notes_text[:max_chars-3] + "..."
         
-        draw.text((left_x + 20, notes_y + 35), notes_text, fill=text_color, font=small_font)
+        draw.text((left_x + 20, notes_y + 30), notes_text, fill=text_color, font=small_font)
     
     # RIGHT SIDE: QR Code section
     qr_section_x = width // 2 + 50
@@ -713,12 +734,12 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     # Load and resize QR code
     qr_img = Image.open(io.BytesIO(qr_code_bytes))
-    qr_size = 280
+    qr_size = 280  # Slightly larger QR code
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
     
     # Center QR code in right section
     qr_x = qr_section_x + (qr_section_width - qr_size) // 2
-    qr_y = (height - qr_size) // 2 - 20
+    qr_y = (height - qr_size) // 2 - 20  # Better centering
     
     # Draw QR code background (white rounded rectangle)
     qr_bg_padding = 25
@@ -729,18 +750,24 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     # Add QR code
     img.paste(qr_img, (qr_x, qr_y))
     
-    # Instruction text below QR code
-    instruction_y = qr_y + qr_size + 40
+    # Instruction text below QR code - REMOVE EMOJI ICONS
+    instruction_y = qr_y + qr_size + 35
     instruction_lines = [
         "Scan to add reminder",
         "to your calendar"
     ]
     
     for i, line in enumerate(instruction_lines):
-        # Calculate text width for centering (approximate)
-        line_width = len(line) * 12  # Rough estimate
+        # Calculate text width for centering (improved method)
+        try:
+            bbox = draw.textbbox((0, 0), line, font=detail_font)
+            line_width = bbox[2] - bbox[0]
+        except:
+            # Fallback calculation
+            line_width = len(line) * 12
+        
         line_x = qr_section_x + (qr_section_width - line_width) // 2
-        draw.text((line_x, instruction_y + i * 30), line, fill=text_color, font=detail_font)
+        draw.text((line_x, instruction_y + i * 25), line, fill=text_color, font=detail_font)
     
     # Add decorative elements
     # Top right corner accent
@@ -753,41 +780,29 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     return img
 
 def main():
-    # Improved CSS for better cloud compatibility
+    # Add mobile-responsive CSS
     st.markdown("""
     <style>
-    /* Import web-safe fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
     .main .block-container {
-        padding-top: 1rem;
+        padding-top: 2rem;
         padding-bottom: 2rem;
         max-width: 100%;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif;
     }
     
-    /* Mobile optimizations */
     @media (max-width: 768px) {
         .main .block-container {
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
-            padding-top: 0.5rem;
+            padding-left: 1rem;
+            padding-right: 1rem;
         }
         
         .stButton button {
             width: 100%;
             height: 3rem;
             font-size: 16px;
-            margin-top: 1rem;
         }
         
         .stTextInput input, .stSelectbox select, .stTextArea textarea {
             font-size: 16px;
-        }
-        
-        /* Smaller form elements on mobile */
-        .stTextInput, .stSelectbox, .stTextArea {
-            margin-bottom: 0.5rem;
         }
     }
     
@@ -795,106 +810,65 @@ def main():
     .css-1d391kg {
         display: none;
     }
-    
-    /* Better spacing for form elements */
-    .stTextInput > div > div > input {
-        border-radius: 8px;
-        border: 2px solid #e0e0e0;
-        padding: 0.75rem;
-    }
-    
-    .stSelectbox > div > div > div {
-        border-radius: 8px;
-        border: 2px solid #e0e0e0;
-    }
-    
-    /* Custom header styling */
-    .header-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 2rem;
-        padding: 1rem;
-        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-        border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    
-    .logo-section {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-    
-    .app-title {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #2c3e50;
-        margin: 0;
-        text-align: center;
-    }
-    
-    @media (max-width: 480px) {
-        .app-title {
-            font-size: 1.5rem;
-        }
-        
-        .header-container {
-            padding: 0.75rem;
-            margin-bottom: 1rem;
-        }
-    }
     </style>
     """, unsafe_allow_html=True)
     
-    # Enhanced header with better cloud compatibility
-    logo_html = ""
+    # Header with logo and title in same line
     if os.path.exists("BI-Logo.png"):
-        try:
-            with open("BI-Logo.png", "rb") as f:
-                logo_bytes = f.read()
-                logo_b64 = base64.b64encode(logo_bytes).decode()
-                logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width: 60px; height: 60px; object-fit: contain;">'
-        except:
-            logo_html = '<div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; background: #00e47c; border-radius: 10px; font-size: 24px;">🐾</div>'
-    else:
-        logo_html = '<div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; background: #00e47c; border-radius: 10px; font-size: 24px;">🐾</div>'
-    
-    st.markdown(f"""
-    <div class="header-container">
-        <div class="logo-section">
-            {logo_html}
-            <h1 class="app-title">🐾 Pet Reminder 🐾</h1>
+        # Encode logo to base64 for HTML embedding
+        with open("BI-Logo.png", "rb") as f:
+            logo_bytes = f.read()
+            logo_b64 = base64.b64encode(logo_bytes).decode()
+            logo_data_url = f"data:image/png;base64,{logo_b64}"
+        
+        st.markdown(f"""
+        <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
+            <img src="{logo_data_url}" style='width: 80px; height: 80px; object-fit: contain; margin-right: 20px;'>
+            <div style='flex: 1; text-align: center;'>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder 🐾</h5>
+            </div>
+            <div style='width: 80px;'></div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
+            <div style='width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 10px; font-size: 35px; margin-right: 20px;'>🐾</div>
+            <div style='flex: 1; text-align: center;'>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder 🐾</h5>
+            </div>
+            <div style='width: 80px;'></div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Main form with improved mobile layout
-    col1, spacer, col2 = st.columns([1, 0.1, 1])
+    st.text("") 
+    
+    # Main form
+    col1, spacer, col2 = st.columns([1, 0.2, 1])
     
     with col1:
-        st.markdown("### 📋 Reminder Details")
+        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h6>", unsafe_allow_html=True)
         
         pet_name = st.text_input("Pet Name", placeholder="e.g., Max, Luna, Charlie")
         
         products = [
             "Broadline",
-            "Eurican L4", 
+            "Eurican L4",
             "Heartgard Plus",
             "Metacam", 
             "NexGard",
             "NexGard SPECTRA",
-            "NexGard COMBO",
-            "Prascend",
-            "Previcox",
-            "ProZinc",
-            "PUREVAX",
-            "Rabisin / Imrab",
-            "Rabisin / Raboral V-RG",
-            "Semintra",
-            "SENVELGO",
-            "Vetmedin",
-            "Other"
+	    "NexGard COMBO",
+     	    "Prascend",
+	    "Previcox",
+     	    "ProZinc",
+	    "PUREVAX",
+     	    "Rabisin / Imrab",
+	    "Rabisin / Raboral V-RG",
+     	    "Semintra",
+	    "SENVELGO",
+            "Vetmedin",	    
+	    "Other"
         ]
         
         product_name = st.selectbox("BI Pet Product", products)
@@ -902,7 +876,7 @@ def main():
         if product_name == "Other":
             product_name = st.text_input("Custom Product Name", placeholder="Enter product name")
         
-        # Start Date Selection
+        # NEW: Start Date Selection
         st.markdown("**📅 Start Date**")
         start_date = st.date_input(
             "When should reminders begin?",
@@ -917,25 +891,33 @@ def main():
         if frequency == "Custom Days":
             frequency_value = st.number_input("Every X days", min_value=1, max_value=365, value=7)
         
-        # Multiple Times Per Day
+        # NEW: Multiple Times Per Day with Duration Limits
         st.markdown("**⏰ Reminder Times**")
         
         # Define time periods with their valid ranges
         time_periods = {
             "Morning": {
                 "default": "08:00",
+                "min_hour": 5,   # 5:00 AM
+                "max_hour": 11,  # 11:59 AM
                 "options": [f"{h:02d}:{m:02d}" for h in range(5, 12) for m in [0, 15, 30, 45]]
             },
             "Afternoon": {
                 "default": "14:00", 
+                "min_hour": 12,  # 12:00 PM
+                "max_hour": 17,  # 5:59 PM
                 "options": [f"{h:02d}:{m:02d}" for h in range(12, 18) for m in [0, 15, 30, 45]]
             },
             "Evening": {
                 "default": "19:00",
+                "min_hour": 18,  # 6:00 PM
+                "max_hour": 21,  # 9:59 PM
                 "options": [f"{h:02d}:{m:02d}" for h in range(18, 22) for m in [0, 15, 30, 45]]
             },
             "Night": {
                 "default": "22:00",
+                "min_hour": 22,  # 10:00 PM
+                "max_hour": 4,   # 4:59 AM (next day)
                 "options": [f"{h:02d}:{m:02d}" for h in range(22, 24) for m in [0, 15, 30, 45]] + 
                           [f"{h:02d}:{m:02d}" for h in range(0, 5) for m in [0, 15, 30, 45]]
             }
@@ -968,8 +950,11 @@ def main():
                     key="afternoon_time"
                 )
                 selected_times.append({"time": afternoon_time, "label": "Afternoon"})
+            
+            
         
         with col_time2:
+            
             if st.checkbox("🌇 Evening", key="evening"):
                 evening_options = time_periods["Evening"]["options"]
                 default_idx = evening_options.index(time_periods["Evening"]["default"]) if time_periods["Evening"]["default"] in evening_options else 0
@@ -980,6 +965,7 @@ def main():
                     key="evening_time"
                 )
                 selected_times.append({"time": evening_time, "label": "Evening"})
+                
                 
             if st.checkbox("🌙 Night", key="night"):
                 night_options = time_periods["Night"]["options"]
@@ -992,12 +978,28 @@ def main():
                 )
                 selected_times.append({"time": night_time, "label": "Night"})
         
-        # Option for custom time
+        # Option for custom time with validation
         if st.checkbox("🕐 Custom Time", key="custom"):
             custom_time = st.time_input("Custom time", value=datetime.strptime("12:00", "%H:%M").time(), key="custom_time")
             custom_label = st.text_input("Custom label", placeholder="e.g., Lunch, Bedtime", key="custom_label")
             
             if custom_label:
+                # Check if custom time overlaps with selected periods
+                custom_hour = custom_time.hour
+                overlap_warning = ""
+                
+                for period_name, period_info in time_periods.items():
+                    if period_name == "Night":
+                        # Special handling for night period (crosses midnight)
+                        if custom_hour >= 22 or custom_hour <= 4:
+                            overlap_warning = f"⚠️ This time overlaps with Night period"
+                    else:
+                        if period_info["min_hour"] <= custom_hour <= period_info["max_hour"]:
+                            overlap_warning = f"⚠️ This time overlaps with {period_name} period"
+                
+                if overlap_warning:
+                    st.warning(overlap_warning)
+                
                 selected_times.append({"time": custom_time.strftime("%H:%M"), "label": custom_label})
         
         # Duration settings
@@ -1006,6 +1008,18 @@ def main():
         end_after_count = None
         if end_type == "Stop after N occurrences":
             end_after_count = st.number_input("Number of reminders", min_value=1, max_value=1000, value=30)
+            
+            if frequency == "Monthly" and end_after_count:
+                months = end_after_count
+                years = months // 12
+                remaining_months = months % 12
+                if years > 0:
+                    duration_text = f"≈ {years} year{'s' if years > 1 else ''}"
+                    if remaining_months > 0:
+                        duration_text += f" and {remaining_months} month{'s' if remaining_months > 1 else ''}"
+                else:
+                    duration_text = f"≈ {remaining_months} month{'s' if remaining_months > 1 else ''}"
+                st.info(f"💡 {end_after_count} reminders = {duration_text}")
         
         notes = st.text_area("Additional Notes (Optional)", placeholder="e.g., Give with food, Check for side effects")
         
@@ -1014,14 +1028,14 @@ def main():
             times_summary = ', '.join([f"{t['time']} ({t['label']})" for t in selected_times])
             st.info(f"📅 Selected times: {times_summary}")
         
-        generate_button = st.button("🔄 Generate QR Code", type="primary", use_container_width=True)
+        generate_button = st.button("🔄 Generate QR Code", type="primary")
     
     with col2:
-        st.markdown("### 📱 QR Code")
+        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Code</h6>", unsafe_allow_html=True)
         
         if generate_button:
             if pet_name and product_name and selected_times:
-                with st.spinner("Generating QR Code..."):
+                with st.spinner("QR Code Generation in Progress...."):
                     try:
                         calendar_data = create_calendar_reminder(
                             pet_name=pet_name,
@@ -1043,8 +1057,7 @@ def main():
                                 'start_date': start_date.strftime('%Y-%m-%d'),
                                 'duration': f"{end_after_count} occurrences" if end_after_count else "Continues indefinitely",
                                 'times': selected_times,
-                                'notes': notes,
-                                'frequency_value': frequency_value
+                                'notes': notes
                             }
                             
                             html_content = create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
@@ -1058,69 +1071,80 @@ def main():
                                 
                                 # Convert PIL image to bytes for download
                                 img_buffer = io.BytesIO()
-                                reminder_image.save(img_buffer, format='PNG', quality=95, optimize=True)
+                                reminder_image.save(img_buffer, format='PNG', quality=95, dpi=(300, 300))
                                 reminder_image_bytes = img_buffer.getvalue()
                                 
                                 # Upload reminder image to S3
                                 reminder_image_url = upload_reminder_image_to_s3(reminder_image_bytes, meaningful_id)
                                 
-                                # Display QR code
-                                st.image(qr_image_bytes, width=250)
+                                col_qr1, col_qr2, col_qr3 = st.columns([0.3, 1, 0.3])
+                                with col_qr2:
+                                    st.image(qr_image_bytes, width=250)
+                                
                                 st.success("✅ QR Code Generated Successfully!")
                                 
-                                # Download buttons
-                                st.download_button(
-                                    label="🖼️ Download Reminder Card",
-                                    data=reminder_image_bytes,
-                                    file_name=f"{meaningful_id}_reminder_card.png",
-                                    mime="image/png",
-                                    use_container_width=True
-                                )
-                                
-                                st.download_button(
-                                    label="📥 Download QR Code",
-                                    data=qr_image_bytes,
-                                    file_name=f"{meaningful_id}_qr.png",
-                                    mime="image/png",
-                                    use_container_width=True
-                                )
-                                
-                                st.download_button(
-                                    label="📅 Download Calendar File", 
-                                    data=calendar_data,
-                                    file_name=f"{meaningful_id}.ics",
-                                    mime="text/calendar",
-                                    use_container_width=True
-                                )
-                                
-                                # Preview and details in expanders
                                 with st.expander("🖼️ Preview Reminder Card"):
                                     st.image(reminder_image_bytes, use_container_width=True)
+                                    #st.info("💡 This image contains all reminder details and can be printed, shared, or saved to your phone!")
+                                
+                                with st.expander("📥 Download Options"):
+                                    # NEW: Download reminder Card with QR code
+                                    st.download_button(
+                                        label="🖼️ Download Reminder Image (with QR Code)",
+                                        data=reminder_image_bytes,
+                                        file_name=f"{meaningful_id}_reminder_image.png",
+                                        mime="image/png",
+                                        help="Download a printable image with QR code and all reminder details"
+                                    )
+                                    
+                                    st.download_button(
+                                        label="📥 Download QR Code Only",
+                                        data=qr_image_bytes,
+                                        file_name=f"{meaningful_id}_qr.png",
+                                        mime="image/png"
+                                    )
+                                    
+                                    st.download_button(
+                                        label="📅 Download Calendar File", 
+                                        data=calendar_data,
+                                        file_name=f"{meaningful_id}.ics",
+                                        mime="text/calendar"
+                                    )
                                 
                                 with st.expander("🔗 URLs"):
-                                    st.code(web_page_url, language="text")
-                                    st.code(calendar_url, language="text")
+                                    st.write(f"**QR Web Page URL:** {web_page_url}")
+                                    st.write(f"**Calendar File URL:** {calendar_url}")
                                     if reminder_image_url:
-                                        st.code(reminder_image_url, language="text")
-                                
-                                with st.expander("📋 Summary"):
-                                    st.json({
-                                        "pet": pet_name,
-                                        "product": product_name,
-                                        "start_date": start_date.strftime('%Y-%m-%d'),
-                                        "frequency": frequency,
-                                        "times": selected_times,
-                                        "duration": reminder_details['duration'],
-                                        "notes": notes if notes else "None"
-                                    })
-                                                                    
+                                        st.write(f"**Reminder Card URL:** {reminder_image_url}")
+                                    else:
+                                        st.write("**Reminder Card URL:** ❌ Upload failed")
+                                    
+                                with st.expander("📋 Reminder Summary"):
+                                    st.write(f"**Pet:** {pet_name}")
+                                    st.write(f"**Product:** {product_name}")
+                                    st.write(f"**Start Date:** {start_date.strftime('%Y-%m-%d')}")
+                                    st.write(f"**Frequency:** {frequency}")
+                                    if frequency_value:
+                                        st.write(f"**Every:** {frequency_value} days")
+                                    st.write(f"**Times per day:** {len(selected_times)}")
+                                    for time_info in selected_times:
+                                        st.write(f"  • {time_info['time']} - {time_info['label']}")
+                                    if end_after_count:
+                                        st.write(f"**Total Reminders:** {end_after_count}")
+                                        st.write(f"**Will Stop After:** {end_after_count} occurrences")
+                                    else:
+                                        st.write(f"**Duration:** Continues indefinitely")
+                                    if notes:
+                                        st.write(f"**Notes:** {notes}")
+                                                                
+                                    
                             else:
-                                st.error("❌ Failed to create web page")
+                                st.error("❌ Failed to create web page - check S3 permissions")
                         else:
-                            st.error("❌ Failed to upload calendar file")
+                            st.error("❌ Failed to upload calendar file - check S3 configuration")
                         
                     except Exception as e:
-                        st.error(f"Error: {str(e)}")
+                        st.error(f"Error generating QR code: {str(e)}")
             elif not selected_times:
                 st.warning("⚠️ Please select at least one reminder time")
             else:
