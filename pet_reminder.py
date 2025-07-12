@@ -1,7 +1,7 @@
 import streamlit as st
 import qrcode
 from icalendar import Calendar, Event, Alarm
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import io
 import base64
 from PIL import Image
@@ -19,11 +19,16 @@ st.set_page_config(
 )
 
 # AWS Configuration
-AWS_REGION = 'us-east-1'
-S3_BUCKET = 'pet-medication-reminders'
+AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')  # Change if needed
+S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')  # CHANGE THIS
 
-# Initialize AWS client
-s3_client = boto3.client('s3', region_name=AWS_REGION)
+# Initialize AWS client with credentials from environment variables
+s3_client = boto3.client(
+    's3',
+    region_name=AWS_REGION,
+    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
+)
 
 # Global counter for generating sequential IDs
 if 'pet_counter' not in st.session_state:
@@ -59,7 +64,7 @@ def get_next_sequence_number():
         st.session_state.pet_counter += 1
     
     return next_count
-
+	
 def generate_meaningful_id(pet_name, product_name):
     """Generate meaningful ID with sequence number"""
     # Get next sequence number from S3 (persistent)
@@ -74,8 +79,8 @@ def generate_meaningful_id(pet_name, product_name):
     
     return meaningful_id
 
-def create_calendar_reminder(pet_name, product_name, frequency, frequency_value, reminder_time, end_after_count=None, notes=""):
-    """Create ICS calendar content for recurring reminder"""
+def create_calendar_reminder(pet_name, product_name, frequency, frequency_value, reminder_times, start_date, end_after_count=None, notes=""):
+    """Create ICS calendar content for recurring reminder with multiple times per day"""
     
     # Create calendar
     cal = Calendar()
@@ -84,61 +89,55 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
     cal.add('calscale', 'GREGORIAN')
     cal.add('method', 'PUBLISH')
     
-    # Create event
-    event = Event()
-    event.add('summary', f"{pet_name} - {product_name}")
-    event.add('description', f"Medication reminder: {product_name}\nPet: {pet_name}\n{notes}")
-    
-    # Calculate start time
-    now = datetime.now()
-    start_time = datetime.combine(now.date(), datetime.strptime(reminder_time, "%H:%M").time())
-    
-    # If start time is in the past today, move to next occurrence
-    if start_time < now:
+    # Create separate events for each time of day
+    for i, time_info in enumerate(reminder_times):
+        time_str = time_info['time']
+        time_label = time_info['label']
+        
+        # Create event
+        event = Event()
+        event_title = f"{pet_name} - {product_name}"
+        if len(reminder_times) > 1:
+            event_title += f" ({time_label})"
+        
+        event.add('summary', event_title)
+        event.add('description', f"Medication reminder: {product_name}\nPet: {pet_name}\nTime: {time_label}\n{notes}")
+        
+        # Calculate start time using the provided start_date
+        start_time = datetime.combine(start_date, datetime.strptime(time_str, "%H:%M").time())
+        
+        event.add('dtstart', start_time)
+        event.add('dtend', start_time + timedelta(hours=1))
+        event.add('dtstamp', datetime.now())
+        event.add('uid', str(uuid.uuid4()))
+        
+        # Add recurrence rule with optional end count
+        rrule = {}
+        
         if frequency == "Daily":
-            start_time += timedelta(days=1)
+            rrule['freq'] = 'daily'
         elif frequency == "Weekly":
-            start_time += timedelta(days=7)
+            rrule['freq'] = 'weekly'
         elif frequency == "Monthly":
-            if start_time.month == 12:
-                start_time = start_time.replace(year=start_time.year + 1, month=1)
-            else:
-                start_time = start_time.replace(month=start_time.month + 1)
+            rrule['freq'] = 'monthly'
         elif frequency == "Custom Days":
-            start_time += timedelta(days=int(frequency_value))
-    
-    event.add('dtstart', start_time)
-    event.add('dtend', start_time + timedelta(hours=1))
-    event.add('dtstamp', datetime.now())
-    event.add('uid', str(uuid.uuid4()))
-    
-    # Add recurrence rule with optional end count
-    rrule = {}
-    
-    if frequency == "Daily":
-        rrule['freq'] = 'daily'
-    elif frequency == "Weekly":
-        rrule['freq'] = 'weekly'
-    elif frequency == "Monthly":
-        rrule['freq'] = 'monthly'
-    elif frequency == "Custom Days":
-        rrule['freq'] = 'daily'
-        rrule['interval'] = int(frequency_value)
-    
-    # Add count limit if specified
-    if end_after_count and end_after_count > 0:
-        rrule['count'] = int(end_after_count)
-    
-    event.add('rrule', rrule)
-    
-    # Add alarm (reminder notification)
-    alarm = Alarm()
-    alarm.add('action', 'DISPLAY')
-    alarm.add('description', f'Time to give {product_name} to {pet_name}!')
-    alarm.add('trigger', timedelta(hours=-1))
-    event.add_component(alarm)
-    
-    cal.add_component(event)
+            rrule['freq'] = 'daily'
+            rrule['interval'] = int(frequency_value)
+        
+        # Add count limit if specified
+        if end_after_count and end_after_count > 0:
+            rrule['count'] = int(end_after_count)
+        
+        event.add('rrule', rrule)
+        
+        # Add alarm (reminder notification)
+        alarm = Alarm()
+        alarm.add('action', 'DISPLAY')
+        alarm.add('description', f'Time to give {product_name} to {pet_name}! ({time_label})')
+        alarm.add('trigger', timedelta(minutes=-15))  # 15 minutes before
+        event.add_component(alarm)
+        
+        cal.add_component(event)
     
     return cal.to_ical().decode('utf-8')
 
@@ -170,6 +169,12 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
                 logo_data_url = f"data:image/png;base64,{logo_b64}"
         except:
             pass
+    
+    # Format reminder times for display
+    times_html_list = ""
+    for t in reminder_details['times']:
+        times_html_list += f"• {t['time']} - {t['label']}<br>"
+    times_html_list = times_html_list.rstrip('<br>')
     
     html_content = f"""
 <!DOCTYPE html>
@@ -271,6 +276,30 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
         
         .detail-value {{
             color: #ffffff;
+            flex: 1;
+            text-align: right;
+        }}
+        
+        .times-section {{
+            background: rgba(0, 228, 124, 0.05);
+            border: 1px dashed #00e47c;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            text-align: left;
+        }}
+        
+        .times-title {{
+            color: #00e47c;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }}
+        
+        .times-list {{
+            color: #ffffff;
+            font-size: 14px;
+            line-height: 1.6;
         }}
         
         .notes-section {{
@@ -398,12 +427,19 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
                 <span class="detail-value">{reminder_details['frequency']}</span>
             </div>
             <div class="detail-row">
-                <span class="detail-label">Time:</span>
-                <span class="detail-value">{reminder_details['time']}</span>
+                <span class="detail-label">Start Date:</span>
+                <span class="detail-value">{reminder_details['start_date']}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">Duration:</span>
                 <span class="detail-value">{reminder_details['duration']}</span>
+            </div>
+            
+            <div class="times-section">
+                <div class="times-title">⏰ Reminder Times:</div>
+                <div class="times-list">
+                    {times_html_list}
+                </div>
             </div>
             
             {f'''
@@ -417,9 +453,39 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
         <a href="{calendar_url}" class="btn btn-primary" download="{pet_name.upper()}_{product_name}_reminder.ics">
             📅 Add to My Calendar
         </a>
+        
+        <div class="instructions">
+            <div class="instructions-title">📱 How to Use:</div>
+            
+            <div class="device-specific ios-instructions" style="display: none;">
+                <strong>iPhone/iPad:</strong><br>
+                • Tap "Add to My Calendar"<br>
+                • Select "Add All Events" when prompted<br>
+                • All {len(reminder_details['times'])} daily reminders will be saved!
+            </div>
+            
+            <div class="device-specific android-instructions" style="display: none;">
+                <strong>Android:</strong><br>
+                • Tap "Add to My Calendar"<br>
+                • Choose Google Calendar (recommended)<br>
+                • Select "Import" to add all reminders<br>
+                • Check your calendar for confirmation
+            </div>
+        </div>
     </div>
 
     <script>
+        // Device detection and instructions
+        function showDeviceInstructions() {{
+            const userAgent = navigator.userAgent;
+            
+            if (/iPhone|iPad|iPod/i.test(userAgent)) {{
+                document.querySelector('.ios-instructions').style.display = 'block';
+            }} else if (/Android/i.test(userAgent)) {{
+                document.querySelector('.android-instructions').style.display = 'block';
+            }}
+        }}
+        
         // Auto-redirect to calendar download on mobile for better UX
         function handleMobileDownload() {{
             const userAgent = navigator.userAgent;
@@ -442,7 +508,10 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
             }}
         }}
         
-        window.addEventListener('load', handleMobileDownload);
+        window.addEventListener('load', function() {{
+            showDeviceInstructions();
+            handleMobileDownload();
+        }});
     </script>
 </body>
 </html>
@@ -547,7 +616,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    st.text(" ")
+    st.text("") 
     
     # Main form
     col1, spacer, col2 = st.columns([1, 0.2, 1])
@@ -571,17 +640,134 @@ def main():
         if product_name == "Other":
             product_name = st.text_input("Custom Product Name", placeholder="Enter product name")
         
-        frequency = st.selectbox("Reminder Frequency", ["Daily", "Weekly", "Monthly", "Custom Days"], index=2)
+        # NEW: Start Date Selection
+        st.markdown("**📅 Start Date**")
+        start_date = st.date_input(
+            "When should reminders begin?",
+            value=date.today(),
+            min_value=date.today(),
+            help="Select the first day you want to receive reminders"
+        )
+        
+        frequency = st.selectbox("Reminder Frequency", ["Daily", "Weekly", "Monthly", "Custom Days"], index=0)
         
         frequency_value = None
         if frequency == "Custom Days":
-            frequency_value = st.number_input("Every X days", min_value=1, max_value=365, value=30)
+            frequency_value = st.number_input("Every X days", min_value=1, max_value=365, value=7)
         
-        end_type = st.radio("", ["Continue indefinitely", "Stop after N occurrences"])
+        # NEW: Multiple Times Per Day with Duration Limits
+        st.markdown("**⏰ Reminder Times**")
+        
+        # Define time periods with their valid ranges
+        time_periods = {
+            "Morning": {
+                "default": "08:00",
+                "min_hour": 5,   # 5:00 AM
+                "max_hour": 11,  # 11:59 AM
+                "options": [f"{h:02d}:{m:02d}" for h in range(5, 12) for m in [0, 15, 30, 45]]
+            },
+            "Afternoon": {
+                "default": "14:00", 
+                "min_hour": 12,  # 12:00 PM
+                "max_hour": 17,  # 5:59 PM
+                "options": [f"{h:02d}:{m:02d}" for h in range(12, 18) for m in [0, 15, 30, 45]]
+            },
+            "Evening": {
+                "default": "19:00",
+                "min_hour": 18,  # 6:00 PM
+                "max_hour": 21,  # 9:59 PM
+                "options": [f"{h:02d}:{m:02d}" for h in range(18, 22) for m in [0, 15, 30, 45]]
+            },
+            "Night": {
+                "default": "22:00",
+                "min_hour": 22,  # 10:00 PM
+                "max_hour": 4,   # 4:59 AM (next day)
+                "options": [f"{h:02d}:{m:02d}" for h in range(22, 24) for m in [0, 15, 30, 45]] + 
+                          [f"{h:02d}:{m:02d}" for h in range(0, 5) for m in [0, 15, 30, 45]]
+            }
+        }
+        
+        # Let user select which times they want
+        selected_times = []
+        
+        col_time1, col_time2 = st.columns(2)
+        
+        with col_time1:
+            if st.checkbox("🌅 Morning", key="morning"):
+                morning_options = time_periods["Morning"]["options"]
+                default_idx = morning_options.index(time_periods["Morning"]["default"]) if time_periods["Morning"]["default"] in morning_options else 0
+                morning_time = st.selectbox(
+                    "Morning time", 
+                    options=morning_options,
+                    index=default_idx,
+                    key="morning_time"
+                )
+                selected_times.append({"time": morning_time, "label": "Morning"})
+            
+            if st.checkbox("🌇 Evening", key="evening"):
+                evening_options = time_periods["Evening"]["options"]
+                default_idx = evening_options.index(time_periods["Evening"]["default"]) if time_periods["Evening"]["default"] in evening_options else 0
+                evening_time = st.selectbox(
+                    "Evening time", 
+                    options=evening_options,
+                    index=default_idx,
+                    key="evening_time"
+                )
+                selected_times.append({"time": evening_time, "label": "Evening"})
+        
+        with col_time2:
+            if st.checkbox("☀️ Afternoon", key="afternoon"):
+                afternoon_options = time_periods["Afternoon"]["options"]
+                default_idx = afternoon_options.index(time_periods["Afternoon"]["default"]) if time_periods["Afternoon"]["default"] in afternoon_options else 0
+                afternoon_time = st.selectbox(
+                    "Afternoon time", 
+                    options=afternoon_options,
+                    index=default_idx,
+                    key="afternoon_time"
+                )
+                selected_times.append({"time": afternoon_time, "label": "Afternoon"})
+            
+            if st.checkbox("🌙 Night", key="night"):
+                night_options = time_periods["Night"]["options"]
+                default_idx = night_options.index(time_periods["Night"]["default"]) if time_periods["Night"]["default"] in night_options else 0
+                night_time = st.selectbox(
+                    "Night time", 
+                    options=night_options,
+                    index=default_idx,
+                    key="night_time"
+                )
+                selected_times.append({"time": night_time, "label": "Night"})
+        
+        # Option for custom time with validation
+        if st.checkbox("🕐 Custom Time", key="custom"):
+            custom_time = st.time_input("Custom time", value=datetime.strptime("12:00", "%H:%M").time(), key="custom_time")
+            custom_label = st.text_input("Custom label", placeholder="e.g., Lunch, Bedtime", key="custom_label")
+            
+            if custom_label:
+                # Check if custom time overlaps with selected periods
+                custom_hour = custom_time.hour
+                overlap_warning = ""
+                
+                for period_name, period_info in time_periods.items():
+                    if period_name == "Night":
+                        # Special handling for night period (crosses midnight)
+                        if custom_hour >= 22 or custom_hour <= 4:
+                            overlap_warning = f"⚠️ This time overlaps with Night period"
+                    else:
+                        if period_info["min_hour"] <= custom_hour <= period_info["max_hour"]:
+                            overlap_warning = f"⚠️ This time overlaps with {period_name} period"
+                
+                if overlap_warning:
+                    st.warning(overlap_warning)
+                
+                selected_times.append({"time": custom_time.strftime("%H:%M"), "label": custom_label})
+        
+        # Duration settings
+        end_type = st.radio("Duration", ["Continue indefinitely", "Stop after N occurrences"])
         
         end_after_count = None
         if end_type == "Stop after N occurrences":
-            end_after_count = st.number_input("Number of reminders", min_value=1, max_value=1000, value=12)
+            end_after_count = st.number_input("Number of reminders", min_value=1, max_value=1000, value=30)
             
             if frequency == "Monthly" and end_after_count:
                 months = end_after_count
@@ -593,11 +779,14 @@ def main():
                         duration_text += f" and {remaining_months} month{'s' if remaining_months > 1 else ''}"
                 else:
                     duration_text = f"≈ {remaining_months} month{'s' if remaining_months > 1 else ''}"
-                st.info(f"💡 {end_after_count} monthly reminders = {duration_text}")
-        
-        reminder_time = st.time_input("Reminder Time", value=datetime.strptime("19:00", "%H:%M").time())
+                st.info(f"💡 {end_after_count} reminders = {duration_text}")
         
         notes = st.text_area("Additional Notes (Optional)", placeholder="e.g., Give with food, Check for side effects")
+        
+        # Show selected times summary
+        if selected_times:
+            times_summary = ', '.join([f"{t['time']} ({t['label']})" for t in selected_times])
+            st.info(f"📅 Selected times: {times_summary}")
         
         generate_button = st.button("🔄 Generate QR Code", type="primary")
     
@@ -605,7 +794,7 @@ def main():
         st.markdown("<h5 style='text-align: left; font-weight: bold;'>📱 QR Code</h5>", unsafe_allow_html=True)
         
         if generate_button:
-            if pet_name and product_name:
+            if pet_name and product_name and selected_times:
                 with st.spinner("QR Code Generation in Progress...."):
                     try:
                         calendar_data = create_calendar_reminder(
@@ -613,7 +802,8 @@ def main():
                             product_name=product_name,
                             frequency=frequency,
                             frequency_value=frequency_value,
-                            reminder_time=reminder_time.strftime("%H:%M"),
+                            reminder_times=selected_times,
+                            start_date=start_date,
                             end_after_count=end_after_count,
                             notes=notes
                         )
@@ -624,8 +814,9 @@ def main():
                         if calendar_url:
                             reminder_details = {
                                 'frequency': frequency,
-                                'time': reminder_time.strftime('%H:%M'),
+                                'start_date': start_date.strftime('%Y-%m-%d'),
                                 'duration': f"{end_after_count} occurrences" if end_after_count else "Continues indefinitely",
+                                'times': selected_times,
                                 'notes': notes
                             }
                             
@@ -641,19 +832,20 @@ def main():
                                 
                                 st.success("✅ QR Code Generated Successfully!")
                                 
-                                
                                 with st.expander("🔗 URLs"):
                                     st.write(f"**QR Web Page URL:** {web_page_url}")
                                     st.write(f"**Calendar File URL:** {calendar_url}")
                                     
-                                
                                 with st.expander("📋 Reminder Summary"):
                                     st.write(f"**Pet:** {pet_name}")
                                     st.write(f"**Product:** {product_name}")
+                                    st.write(f"**Start Date:** {start_date.strftime('%Y-%m-%d')}")
                                     st.write(f"**Frequency:** {frequency}")
                                     if frequency_value:
                                         st.write(f"**Every:** {frequency_value} days")
-                                    st.write(f"**Time:** {reminder_time.strftime('%H:%M')}")
+                                    st.write(f"**Times per day:** {len(selected_times)}")
+                                    for time_info in selected_times:
+                                        st.write(f"  • {time_info['time']} - {time_info['label']}")
                                     if end_after_count:
                                         st.write(f"**Total Reminders:** {end_after_count}")
                                         st.write(f"**Will Stop After:** {end_after_count} occurrences")
@@ -683,6 +875,8 @@ def main():
                         
                     except Exception as e:
                         st.error(f"Error generating QR code: {str(e)}")
+            elif not selected_times:
+                st.warning("⚠️ Please select at least one reminder time")
             else:
                 st.warning("⚠️ Please fill in Pet Name and Product Name")
         else:
