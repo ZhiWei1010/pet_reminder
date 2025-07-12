@@ -581,7 +581,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <img src="{logo_data_url}" style='width: 80px; height: 80px; object-fit: contain; margin-right: 20px;'>
             <div style='flex: 1; text-align: center;'>
-                <h4 style='margin: 0; font-weight: bold; color: #333;'>🐾Pet Reminder🐾</h4>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾Pet Reminder🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -591,7 +591,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <div style='width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 10px; font-size: 35px; margin-right: 20px;'>🐾</div>
             <div style='flex: 1; text-align: center;'>
-                <h4 style='margin: 0; font-weight: bold; color: #333;'>🐾Pet Reminder🐾</h4>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾Pet Reminder🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
