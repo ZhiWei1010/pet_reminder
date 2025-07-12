@@ -19,8 +19,8 @@ st.set_page_config(
 )
 
 # AWS Configuration
-AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')  # Change if needed
-S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')  # CHANGE THIS
+AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')
 
 # Initialize AWS client with credentials from environment variables
 s3_client = boto3.client(
@@ -581,7 +581,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <img src="{logo_data_url}" style='width: 80px; height: 80px; object-fit: contain; margin-right: 20px;'>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾Pet Reminder🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -591,7 +591,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <div style='width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 10px; font-size: 35px; margin-right: 20px;'>🐾</div>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾Pet Reminder🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -603,7 +603,7 @@ def main():
     col1, spacer, col2 = st.columns([1, 0.2, 1])
     
     with col1:
-        st.markdown("<h5 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h5>", unsafe_allow_html=True)
+        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h6>", unsafe_allow_html=True)
         
         pet_name = st.text_input("Pet Name", placeholder="e.g., Max, Luna, Charlie")
         
@@ -783,7 +783,7 @@ def main():
         generate_button = st.button("🔄 Generate QR Code", type="primary")
     
     with col2:
-        st.markdown("<h5 style='text-align: left; font-weight: bold;'>📱 QR Code</h5>", unsafe_allow_html=True)
+        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Code</h6>", unsafe_allow_html=True)
         
         if generate_button:
             if pet_name and product_name and selected_times:
