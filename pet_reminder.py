@@ -1028,14 +1028,14 @@ def main():
             times_summary = ', '.join([f"{t['time']} ({t['label']})" for t in selected_times])
             st.info(f"📅 Selected times: {times_summary}")
         
-        generate_button = st.button("🔄 Generate QR Code", type="primary")
+        generate_button = st.button("🔄 Generate QR Reminder Card", type="primary")
     
     with col2:
-        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Code</h6>", unsafe_allow_html=True)
+        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         
         if generate_button:
             if pet_name and product_name and selected_times:
-                with st.spinner("QR Code Generation in Progress...."):
+                with st.spinner("QR Reminder Card Generation in Progress...."):
                     try:
                         calendar_data = create_calendar_reminder(
                             pet_name=pet_name,
@@ -1080,16 +1080,16 @@ def main():
                                 # Display reminder card instead of QR code
                                 st.image(reminder_image_bytes, use_container_width=True)
                                 
-                                st.success("✅ QR Code Generated Successfully!")
+                                #st.success("✅ QR Reminder Card Generated Successfully!")
                                 
                                 with st.expander("📥 Download Options"):
                                     # NEW: Download reminder Card with QR code
                                     st.download_button(
-                                        label="🖼️ Download Reminder Image (with QR Code)",
+                                        label="🖼️ Download Reminder Card (with QR Code)",
                                         data=reminder_image_bytes,
                                         file_name=f"{meaningful_id}_reminder_image.png",
-                                        mime="image/png",
-                                        help="Download a printable image with QR code and all reminder details"
+                                        mime="image/png"
+                                        
                                     )
                                     
                                     st.download_button(
