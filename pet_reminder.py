@@ -13,7 +13,7 @@ import boto3
 
 # Configure page with mobile optimization
 st.set_page_config(
-    page_title="Pet Medication Reminder",
+    page_title="Pets Medication Reminder",
     page_icon="🐾",
     layout="wide"
 )
@@ -610,7 +610,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <div style='width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 10px; font-size: 35px; margin-right: 20px;'>🐾</div>
             <div style='flex: 1; text-align: center;'>
-                <h4 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Medication Reminder 🐾</h4>
+                <h4 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pets Medication Reminder 🐾</h4>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -627,15 +627,26 @@ def main():
         pet_name = st.text_input("Pet Name", placeholder="e.g., Max, Luna, Charlie")
         
         products = [
-            "NexGard (Flea & Tick)",
-            "NexGard SPECTRA (Flea, Tick & Worm)",
-            "Heartgard Plus (Heartworm)",
-            "Metacam (Pain Relief)", 
-            "Frontline Plus (Flea & Tick)",
-            "Other"
+            "Broadline",
+            "Eurican L4",
+            "Heartgard Plus",
+            "Metacam", 
+            "NexGard",
+            "NexGard SPECTRA",
+	    "NexGard COMBO",
+     	    "Prascend",
+	    "Previcox",
+     	    "ProZinc",
+	    "PUREVAX",
+     	    "Rabisin / Imrab",
+	    "Rabisin / Raboral V-RG",
+     	    "Semintra",
+	    "SENVELGO",
+            "Vetmedin",	    
+	    "Other"
         ]
         
-        product_name = st.selectbox("Boehringer Ingelheim Product", products)
+        product_name = st.selectbox("BI Pets Product", products)
         
         if product_name == "Other":
             product_name = st.text_input("Custom Product Name", placeholder="Enter product name")
