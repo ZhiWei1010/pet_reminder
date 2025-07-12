@@ -806,8 +806,8 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     # Instruction text below QR code
     instruction_y = qr_y + qr_size + 35
     instruction_lines = [
-        "Scan using Mobile or long press",
-        "to add reminder to your calendar"
+        "Scan (or) long press using Mobile",
+        "to add reminder to your Calendar"
     ]
     
     for i, line in enumerate(instruction_lines):
