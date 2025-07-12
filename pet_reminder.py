@@ -4,7 +4,7 @@ from icalendar import Calendar, Event, Alarm
 from datetime import datetime, timedelta, date
 import io
 import base64
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import uuid
 import os
 import urllib.parse
@@ -155,6 +155,22 @@ def upload_to_s3(calendar_data, file_id):
         return f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/calendars/{file_id}.ics"
     except Exception as e:
         st.error(f"Error uploading to S3: {e}")
+        return None
+
+def upload_reminder_image_to_s3(image_bytes, file_id):
+    """Upload reminder image to S3 and return public URL"""
+    try:
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=f"images/{file_id}_reminder_image.png",
+            Body=image_bytes,
+            ContentType='image/png',
+            ContentDisposition=f'attachment; filename="{file_id}_reminder_image.png"'
+        )
+        
+        return f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/images/{file_id}_reminder_image.png"
+    except Exception as e:
+        st.error(f"Error uploading image to S3: {e}")
         return None
 
 def create_web_page_html(pet_name, product_name, calendar_url, reminder_details):
@@ -535,6 +551,197 @@ def generate_qr_code(web_page_url):
     
     return img_buffer.getvalue()
 
+def create_reminder_image(pet_name, product_name, reminder_details, qr_code_bytes):
+    """Create a professional business card style reminder image"""
+    
+    # Business card dimensions (landscape orientation for sharing)
+    width, height = 1200, 800
+    
+    # Colors matching your web design
+    bg_color = (8, 49, 42)  # #08312a
+    accent_color = (0, 228, 124)  # #00e47c
+    text_color = (255, 255, 255)  # white
+    light_accent = (0, 228, 124, 40)  # Semi-transparent accent
+    
+    # Create image with high quality
+    img = Image.new('RGB', (width, height), bg_color)
+    draw = ImageDraw.Draw(img)
+    
+    # Try to load custom fonts with better sizing
+    try:
+        large_font = ImageFont.truetype("arial.ttf", 48)
+        title_font = ImageFont.truetype("arial.ttf", 32)
+        subtitle_font = ImageFont.truetype("arial.ttf", 24)
+        detail_font = ImageFont.truetype("arial.ttf", 20)
+        small_font = ImageFont.truetype("arial.ttf", 18)
+    except:
+        large_font = ImageFont.load_default()
+        title_font = ImageFont.load_default()
+        subtitle_font = ImageFont.load_default()
+        detail_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+    
+    # Draw gradient background effect
+    for i in range(height):
+        color_factor = i / height
+        r = int(8 + (10 - 8) * color_factor)
+        g = int(49 + (61 - 49) * color_factor)
+        b = int(42 + (51 - 42) * color_factor)
+        draw.line([(0, i), (width, i)], fill=(r, g, b))
+    
+    # Draw decorative border
+    border_width = 8
+    draw.rectangle([0, 0, width, height], outline=accent_color, width=border_width)
+    
+    # Draw BI Logo at top left corner (BIGGER and better handling)
+    logo_size = 172  # Increased from 70 to 120
+    logo_x = 30
+    logo_y = 30
+    
+    logo_drawn = False
+    if os.path.exists("BI-Logo-2.png"):
+        try:
+            logo_img = Image.open("BI-Logo-2.png")
+            # Use thumbnail to maintain aspect ratio properly
+            logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
+            actual_w, actual_h = logo_img.size
+            
+            # Center the logo in the allocated space if it's smaller
+            center_x = logo_x + (logo_size - actual_w) // 2
+            center_y = logo_y + (logo_size - actual_h) // 2
+            
+            if logo_img.mode == 'RGBA':
+                img.paste(logo_img, (center_x, center_y), logo_img)
+            else:
+                img.paste(logo_img, (center_x, center_y))
+            logo_drawn = True
+        except Exception as e:
+            print(f"Error loading BI-Logo-2.png: {e}")
+            pass
+    
+    if not logo_drawn and os.path.exists("BI-Logo.png"):
+        try:
+            logo_img = Image.open("BI-Logo.png")
+            logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
+            actual_w, actual_h = logo_img.size
+            
+            center_x = logo_x + (logo_size - actual_w) // 2
+            center_y = logo_y + (logo_size - actual_h) // 2
+            
+            if logo_img.mode == 'RGBA':
+                img.paste(logo_img, (center_x, center_y), logo_img)
+            else:
+                img.paste(logo_img, (center_x, center_y))
+            logo_drawn = True
+        except Exception as e:
+            print(f"Error loading BI-Logo.png: {e}")
+            pass
+    
+    if not logo_drawn:
+        # Fallback: draw simple text instead of emoji
+        draw.text((logo_x, logo_y), "BI", fill=accent_color, font=large_font)
+    
+    # LEFT SIDE: Pet info and details (REDUCED SPACING)
+    left_section_width = width // 2 - 50
+    left_x = 60
+    
+    # Pet name (move up to reduce space)
+    pet_y = 180  # Reduced from higher value
+    draw.text((left_x, pet_y), pet_name.upper(), fill=accent_color, font=large_font)
+    
+    # Product name (tighter spacing)
+    product_y = pet_y + 60  # Reduced spacing
+    draw.text((left_x, product_y), '('+product_name+')', fill=text_color, font=title_font)
+    
+    # Details section (tighter spacing) - REPLACE ICONS WITH TEXT SYMBOLS
+    details_y = product_y + 60  # Reduced spacing
+    
+    # Format frequency better
+    frequency_text = reminder_details['frequency']
+    if reminder_details['frequency'] == 'Custom Days':
+        frequency_text = f"Every {reminder_details.get('frequency_value', 'X')} days"
+    
+    
+    details = [
+        f" ",
+        f"• Frequency: {frequency_text}",
+        f"• Starts: {reminder_details['start_date']}",
+        f"• Duration: {reminder_details['duration']}",
+        f" "
+    ]
+    
+    for i, detail in enumerate(details):
+        draw.text((left_x, details_y + i * 30), detail, fill=text_color, font=detail_font)
+    
+    # Times section (tighter spacing) - REPLACE ICON WITH TEXT
+    times_y = details_y + len(details) * 30 + 15  # Reduced spacing
+    draw.text((left_x, times_y), "Reminder Timings:", fill=accent_color, font=detail_font)
+    
+    #for i, time_info in enumerate(reminder_details['times']):
+    #    time_text = f"• {time_info['time']} ({time_info['label']})"
+    #    draw.text((left_x + 20, times_y + 30 + i * 25), time_text, fill=text_color, font=small_font)
+        
+    times_text = " / ".join([f"{t['time']} ({t['label']})" for t in reminder_details['times']])
+    draw.text((left_x + 20, times_y + 30), f"{times_text}", fill=text_color, font=small_font)
+    
+    # Notes if present (tighter spacing) - REPLACE ICON WITH TEXT
+    if reminder_details.get('notes') and reminder_details['notes'].strip():
+        notes_y = times_y + 30 + len(reminder_details['times']) * 25 + 15  # Tighter spacing
+        draw.text((left_x, notes_y), "Additional Notes:", fill=accent_color, font=detail_font)
+        
+        # Wrap notes text
+        notes_text = reminder_details['notes']
+        max_chars = 40
+        if len(notes_text) > max_chars:
+            notes_text = notes_text[:max_chars-3] + "..."
+        
+        draw.text((left_x + 20, notes_y + 30), notes_text, fill=text_color, font=small_font)
+    
+    # RIGHT SIDE: QR Code section
+    qr_section_x = width // 2 + 50
+    qr_section_width = width // 2 - 100
+    
+    # Load and resize QR code
+    qr_img = Image.open(io.BytesIO(qr_code_bytes))
+    qr_size = 280  # Slightly larger QR code
+    qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+    
+    # Center QR code in right section
+    qr_x = qr_section_x + (qr_section_width - qr_size) // 2
+    qr_y = (height - qr_size) // 2 - 20  # Better centering
+    
+    # Draw QR code background (white rounded rectangle)
+    qr_bg_padding = 25
+    qr_bg_rect = [qr_x - qr_bg_padding, qr_y - qr_bg_padding, 
+                  qr_x + qr_size + qr_bg_padding, qr_y + qr_size + qr_bg_padding]
+    draw.rectangle(qr_bg_rect, fill=text_color, outline=accent_color, width=3)
+    
+    # Add QR code
+    img.paste(qr_img, (qr_x, qr_y))
+    
+    # Instruction text below QR code - REMOVE EMOJI ICONS
+    instruction_y = qr_y + qr_size + 35
+    instruction_lines = [
+        "Scan to add reminder",
+        "to your calendar"
+    ]
+    
+    for i, line in enumerate(instruction_lines):
+        line_bbox = draw.textbbox((0, 0), line, font=detail_font)
+        line_width = line_bbox[2] - line_bbox[0]
+        line_x = qr_section_x + (qr_section_width - line_width) // 2
+        draw.text((line_x, instruction_y + i * 25), line, fill=text_color, font=detail_font)
+    
+    # Add decorative elements
+    # Top right corner accent
+    corner_size = 100
+    draw.rectangle([width - corner_size, 0, width, corner_size], fill=accent_color)
+    
+    # Bottom left corner accent
+    draw.rectangle([0, height - corner_size, corner_size, height], fill=accent_color)
+    
+    return img
+
 def main():
     # Add mobile-responsive CSS
     st.markdown("""
@@ -695,19 +902,7 @@ def main():
                     key="morning_time"
                 )
                 selected_times.append({"time": morning_time, "label": "Morning"})
-            
-            if st.checkbox("🌇 Evening", key="evening"):
-                evening_options = time_periods["Evening"]["options"]
-                default_idx = evening_options.index(time_periods["Evening"]["default"]) if time_periods["Evening"]["default"] in evening_options else 0
-                evening_time = st.selectbox(
-                    "Evening time", 
-                    options=evening_options,
-                    index=default_idx,
-                    key="evening_time"
-                )
-                selected_times.append({"time": evening_time, "label": "Evening"})
-        
-        with col_time2:
+                
             if st.checkbox("☀️ Afternoon", key="afternoon"):
                 afternoon_options = time_periods["Afternoon"]["options"]
                 default_idx = afternoon_options.index(time_periods["Afternoon"]["default"]) if time_periods["Afternoon"]["default"] in afternoon_options else 0
@@ -719,6 +914,22 @@ def main():
                 )
                 selected_times.append({"time": afternoon_time, "label": "Afternoon"})
             
+            
+        
+        with col_time2:
+            
+            if st.checkbox("🌇 Evening", key="evening"):
+                evening_options = time_periods["Evening"]["options"]
+                default_idx = evening_options.index(time_periods["Evening"]["default"]) if time_periods["Evening"]["default"] in evening_options else 0
+                evening_time = st.selectbox(
+                    "Evening time", 
+                    options=evening_options,
+                    index=default_idx,
+                    key="evening_time"
+                )
+                selected_times.append({"time": evening_time, "label": "Evening"})
+                
+                
             if st.checkbox("🌙 Night", key="night"):
                 night_options = time_periods["Night"]["options"]
                 default_idx = night_options.index(time_periods["Night"]["default"]) if time_periods["Night"]["default"] in night_options else 0
@@ -818,15 +1029,58 @@ def main():
                             if web_page_url:
                                 qr_image_bytes = generate_qr_code(web_page_url)
                                 
+                                # Generate the combined reminder image
+                                reminder_image = create_reminder_image(pet_name, product_name, reminder_details, qr_image_bytes)
+                                
+                                # Convert PIL image to bytes for download
+                                img_buffer = io.BytesIO()
+                                reminder_image.save(img_buffer, format='PNG', quality=95, dpi=(300, 300))
+                                reminder_image_bytes = img_buffer.getvalue()
+                                
+                                # Upload reminder image to S3
+                                reminder_image_url = upload_reminder_image_to_s3(reminder_image_bytes, meaningful_id)
+                                
                                 col_qr1, col_qr2, col_qr3 = st.columns([0.3, 1, 0.3])
                                 with col_qr2:
                                     st.image(qr_image_bytes, width=250)
                                 
                                 st.success("✅ QR Code Generated Successfully!")
                                 
+                                with st.expander("🖼️ Preview Reminder Card"):
+                                    st.image(reminder_image_bytes, use_container_width=True)
+                                    #st.info("💡 This image contains all reminder details and can be printed, shared, or saved to your phone!")
+                                
+                                with st.expander("📥 Download Options"):
+                                    # NEW: Download reminder Card with QR code
+                                    st.download_button(
+                                        label="🖼️ Download Reminder Image (with QR Code)",
+                                        data=reminder_image_bytes,
+                                        file_name=f"{meaningful_id}_reminder_image.png",
+                                        mime="image/png",
+                                        help="Download a printable image with QR code and all reminder details"
+                                    )
+                                    
+                                    st.download_button(
+                                        label="📥 Download QR Code Only",
+                                        data=qr_image_bytes,
+                                        file_name=f"{meaningful_id}_qr.png",
+                                        mime="image/png"
+                                    )
+                                    
+                                    st.download_button(
+                                        label="📅 Download Calendar File", 
+                                        data=calendar_data,
+                                        file_name=f"{meaningful_id}.ics",
+                                        mime="text/calendar"
+                                    )
+                                
                                 with st.expander("🔗 URLs"):
                                     st.write(f"**QR Web Page URL:** {web_page_url}")
                                     st.write(f"**Calendar File URL:** {calendar_url}")
+                                    if reminder_image_url:
+                                        st.write(f"**Reminder Card URL:** {reminder_image_url}")
+                                    else:
+                                        st.write("**Reminder Card URL:** ❌ Upload failed")
                                     
                                 with st.expander("📋 Reminder Summary"):
                                     st.write(f"**Pet:** {pet_name}")
@@ -845,21 +1099,8 @@ def main():
                                         st.write(f"**Duration:** Continues indefinitely")
                                     if notes:
                                         st.write(f"**Notes:** {notes}")
-                                
-                                with st.expander("📥 Download Options"):
-                                    st.download_button(
-                                        label="📥 Download QR Code",
-                                        data=qr_image_bytes,
-                                        file_name=f"{meaningful_id}_qr.png",
-                                        mime="image/png"
-                                    )
+                                                                
                                     
-                                    st.download_button(
-                                        label="📅 Download Calendar File", 
-                                        data=calendar_data,
-                                        file_name=f"{meaningful_id}.ics",
-                                        mime="text/calendar"
-                                    )
                             else:
                                 st.error("❌ Failed to create web page - check S3 permissions")
                         else:
