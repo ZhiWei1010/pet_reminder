@@ -878,7 +878,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <img src="{logo_data_url}" style='width: 80px; height: 80px; object-fit: contain; margin-right: 20px;'>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333; font-size: 19px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;'>🐾 Pet Reminder 🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333; font-size: 15px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;'>🐾 Pet Reminder 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
