@@ -174,8 +174,22 @@ Pet Reminder System
         if reminder_details['frequency'] == 'Custom Days':
             frequency_text = f"Every {reminder_details.get('frequency_value', 'X')} days"
         
-        html_body = f"""
-<!DOCTYPE html>
+        # Create the HTML body as a separate variable to avoid f-string issues
+        logo_img_tag = f'<img src="{logo_data_url}" alt="BI Logo" class="logo-img">' if logo_data_url else '<div class="logo-fallback">🐾</div>'
+        
+        notes_section_html = ""
+        if reminder_details.get('notes') and reminder_details['notes'].strip():
+            notes_section_html = f'''
+            <div class="notes-section">
+                <div class="notes-title">
+                    <span class="notes-title-icon">📝</span>Additional Notes
+                </div>
+                <div class="notes-text">{reminder_details['notes']}</div>
+            </div>
+            '''
+        
+        
+        html_body = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -520,7 +534,7 @@ Pet Reminder System
     <div class="email-container">
         <div class="header">
             <div class="logo-container">
-                {f'<img src="{logo_data_url}" alt="BI Logo" class="logo-img">' if logo_data_url else '<div class="logo-fallback">🐾</div>'}
+                {logo_img_tag}
             </div>
             <div class="email-title">Pet Reminder Card</div>
             <div class="greeting">Your personalized medication reminder for <strong>{pet_name}</strong></div>
@@ -541,6 +555,89 @@ Pet Reminder System
             <div class="summary-section">
                 <div class="section-title">
                     <span class="section-title-icon">📋</span>Reminder Summary
+                </div>
+                
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Pet Name</div>
+                        <div class="detail-value">{pet_name}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Product</div>
+                        <div class="detail-value">{product_name}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Frequency</div>
+                        <div class="detail-value">{frequency_text}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Duration</div>
+                        <div class="detail-value">{reminder_details['duration']}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Start Date</div>
+                        <div class="detail-value">{reminder_details['start_date']}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">End Date</div>
+                        <div class="detail-value">{reminder_details['end_date']}</div>
+                    </div>
+                </div>
+                
+                <div class="detail-item">
+                    <div class="detail-label">Total Reminders</div>
+                    <div class="detail-value">{reminder_details['total_reminders']} reminders scheduled</div>
+                </div>
+            </div>
+            
+            <div class="times-section">
+                <div class="times-title">
+                    <span class="times-title-icon">⏰</span>Daily Reminder Times
+                </div>
+                <ul class="times-list">
+                    {times_html_list}
+                </ul>
+            </div>
+            
+            {notes_section_html}
+            
+            <div class="attachment-notice">
+                <div class="attachment-notice-title">
+                    <span class="attachment-notice-title-icon">📎</span>Calendar File Attached
+                </div>
+                <div class="attachment-text">
+                    A calendar file (.ics) is attached to this email. Download and import it into your 
+                    preferred calendar app (Google Calendar, Apple Calendar, Outlook, etc.) to receive 
+                    automatic notifications for each medication time.
+                </div>
+            </div>
+            
+            <div class="instructions">
+                <div class="instructions-title">
+                    <span class="instructions-title-icon">📱</span>How to Use This Reminder
+                </div>
+                <ul class="instructions-list">
+                    <li><span class="instructions-list-icon">✅</span>Save the reminder card image above to your phone or print it</li>
+                    <li><span class="instructions-list-icon">✅</span>Download the attached calendar file (.ics)</li>
+                    <li><span class="instructions-list-icon">✅</span>Import the calendar file into your preferred calendar app</li>
+                    <li><span class="instructions-list-icon">✅</span>Enable notifications to receive alerts at medication times</li>
+                    <li><span class="instructions-list-icon">✅</span>Scan the QR code anytime for quick access to reminder details</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p class="footer-text">
+                Keep this email for your records. The reminder card and calendar file contain all the information you need.
+            </p>
+            <p class="signature">
+                Best regards,<br>
+                <strong>Pet Reminder System</strong>
+            </p>
+        </div>
+    </div>
+</body>
+</html>"""
                 </div>
                 
                 <div class="detail-grid">
