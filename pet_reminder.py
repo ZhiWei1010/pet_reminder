@@ -138,7 +138,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         msg = MIMEMultipart('related')
         msg['From'] = EMAIL_USER
         msg['To'] = recipient_email
-        msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
+        msg['Subject'] = f"🐾 Pet QR Reminder Card - {pet_name} ({product_name}) 🐾"
         
         # Create the HTML email body with base64 encoded QR code
         html_body = f"""
@@ -358,8 +358,8 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
 <body>
     <div class="email-container">
         <div class="header">
-            <h1>🐾 Pet Reminder Card</h1>
-            <p>Medication schedule for <strong>{pet_name}</strong></p>
+            <h1>🐾 Pet QR Reminder Card 🐾</h1>
+            <p>Schedule for <strong>{pet_name} ({product_name})</strong></p>
         </div>
         
         <div class="qr-section">
@@ -367,13 +367,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             <div class="qr-container">
                 {f'<img src="data:image/png;base64,{qr_base64}" alt="QR Code for Pet Reminder" />' if qr_base64 else '<div style="width:150px;height:150px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;border-radius:5px;">QR Code</div>'}
             </div>
-            <div class="qr-instructions">
-                👆 Point your camera at the QR code above
-            </div>
-            <div class="scan-tip">
-                💡 <strong>iPhone:</strong> Open Camera app and point at QR code<br>
-                💡 <strong>Android:</strong> Open Camera or Google Lens
-            </div>
+            
             <div class="qr-link">
                 Can't scan? <a href="{web_page_url}">Click here instead</a>
             </div>
@@ -387,7 +381,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                 <span class="detail-value">{pet_name}</span>
             </div>
             <div class="detail-item">
-                <span class="detail-label">Product:</span>
+                <span class="detail-label">BI Product:</span>
                 <span class="detail-value">{product_name}</span>
             </div>
             <div class="detail-item">
@@ -422,25 +416,6 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                 <div class="notes-text">{reminder_details['notes']}</div>
             </div>
             ''' if reminder_details.get('notes') and reminder_details['notes'].strip() else ''}
-        </div>
-        
-        <div class="attachment-note">
-            <strong>📎 Attachments Included:</strong><br>
-            • Full Reminder Card (PNG image) - Save to your device<br>
-            • Calendar File (.ics) - Add reminders to your calendar
-        </div>
-        
-        <div class="instructions">
-            <div class="instructions-title">📅 How to Use</div>
-            <div class="instruction-step">Scan the QR code above with your phone camera</div>
-            <div class="instruction-step">Download the attached reminder card for offline use</div>
-            <div class="instruction-step">Open the attached calendar file (.ics) to add reminders</div>
-            <div class="instruction-step">Set notification preferences in your calendar app</div>
-        </div>
-        
-        <div class="footer">
-            <p><strong>Pet Reminder System</strong></p>
-            <p>Helping you never miss your pet's medication schedule</p>
         </div>
     </div>
 </body>
