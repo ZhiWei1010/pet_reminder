@@ -89,23 +89,55 @@ def validate_email(email):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
+def generate_qr_svg(web_page_url):
+    """Generate QR code as SVG string for HTML embedding"""
+    import qrcode.image.svg
+    
+    factory = qrcode.image.svg.SvgPathImage
+    qr = qrcode.QRCode(
+        version=2,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4,
+        image_factory=factory
+    )
+    
+    qr.add_data(web_page_url)
+    qr.make(fit=True)
+    
+    # Generate SVG
+    img = qr.make_image()
+    svg_string = img.to_string().decode('utf-8')
+    
+    # Customize SVG colors to match theme
+    svg_string = svg_string.replace('fill="black"', 'fill="#000000"')
+    svg_string = svg_string.replace('fill="white"', 'fill="#00e47c"')
+    
+    return svg_string
+
 def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
-    """Send email with QR code embedded in body for scanning and full reminder card as attachment"""
+    """Send email with SVG QR code in body and full reminder card as attachment"""
     try:
         if not EMAIL_USER or not EMAIL_PASSWORD:
             return False, "Email configuration not set. Please configure SMTP settings."
         
-        # We need to generate JUST the QR code for embedding in email body
-        # First, let's extract or regenerate the QR code from the session state
-        qr_image_bytes = st.session_state.generated_content.get('qr_image_bytes') if st.session_state.generated_content else None
+        # Get the web page URL from session state for QR generation
+        web_page_url = st.session_state.generated_content.get('web_page_url') if st.session_state.generated_content else None
+        
+        if not web_page_url:
+            # Fallback URL if web page not available
+            web_page_url = f"https://example.com/reminder/{pet_name}_{product_name}"
+        
+        # Generate SVG QR code
+        qr_svg = generate_qr_svg(web_page_url)
         
         # Create message
-        msg = MIMEMultipart('related')  # 'related' for embedded images
+        msg = MIMEMultipart('related')
         msg['From'] = EMAIL_USER
         msg['To'] = recipient_email
         msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
         
-        # Create the HTML email body with embedded QR code
+        # Create the HTML email body with SVG QR code
         html_body = f"""
 <!DOCTYPE html>
 <html>
@@ -157,18 +189,31 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             margin-bottom: 15px;
             font-size: 22px;
         }}
-        .qr-section img {{
-            max-width: 250px;
-            height: auto;
+        .qr-container {{
+            display: inline-block;
+            padding: 20px;
+            background: white;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            background: white;
-            padding: 15px;
+        }}
+        .qr-container svg {{
+            width: 150px;
+            height: 150px;
+            display: block;
         }}
         .qr-instructions {{
             margin-top: 15px;
             font-size: 16px;
             color: #08312a;
+            font-weight: 600;
+        }}
+        .qr-link {{
+            margin-top: 10px;
+            font-size: 14px;
+        }}
+        .qr-link a {{
+            color: #007bff;
+            text-decoration: none;
             font-weight: 600;
         }}
         .details-section {{
@@ -283,8 +328,9 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             .header h1 {{
                 font-size: 24px;
             }}
-            .qr-section img {{
-                max-width: 200px;
+            .qr-container svg {{
+                width: 120px;
+                height: 120px;
             }}
             .detail-item {{
                 flex-direction: column;
@@ -305,9 +351,14 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         
         <div class="qr-section">
             <h2>📱 Scan QR Code</h2>
-            <img src="cid:qr_code" alt="QR Code for Pet Reminder" />
+            <div class="qr-container">
+                {qr_svg}
+            </div>
             <div class="qr-instructions">
-                👆 Long press or scan with your phone camera
+                👆 Point your camera at the QR code above
+            </div>
+            <div class="qr-link">
+                Or click here: <a href="{web_page_url}">Open Reminder Page</a>
             </div>
         </div>
         
@@ -364,8 +415,8 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         
         <div class="instructions">
             <div class="instructions-title">📅 How to Use</div>
-            <div class="instruction-step">Scan the QR code above to access the reminder page</div>
-            <div class="instruction-step">Download the attached reminder card image</div>
+            <div class="instruction-step">Scan the QR code above or click the link to access the reminder page</div>
+            <div class="instruction-step">Download the attached reminder card image for offline use</div>
             <div class="instruction-step">Open the attached calendar file (.ics) to add reminders</div>
             <div class="instruction-step">Set notification preferences in your calendar app</div>
         </div>
@@ -379,9 +430,11 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
 </html>
         """
         
-        # Create plain text version for email clients that don't support HTML
+        # Create plain text version
         text_body = f"""
 🐾 Pet Reminder Card - {pet_name} ({product_name})
+
+🔗 Reminder Link: {web_page_url}
 
 📋 Reminder Details:
 • Pet Name: {pet_name}
@@ -402,9 +455,9 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         
         text_body += """
 📱 How to use:
-1. Check the attachments for the full reminder card and calendar file
-2. Scan the QR code (if viewing HTML email) with your phone camera
-3. Download the attached calendar file (.ics) to add reminders to your calendar
+1. Click the reminder link above or scan the QR code (if viewing HTML email)
+2. Download the attached reminder card and calendar file
+3. Add the calendar file (.ics) to your calendar app
 
 📎 Attachments:
 • Full Reminder Card (PNG image)
@@ -414,25 +467,15 @@ Best regards,
 Pet Reminder System
         """
         
-        # Create multipart alternative message structure
+        # Create multipart structure
         msg_alternative = MIMEMultipart('alternative')
         
-        # Add text and HTML parts
         part_text = MIMEText(text_body, 'plain')
         part_html = MIMEText(html_body, 'html')
         
         msg_alternative.attach(part_text)
         msg_alternative.attach(part_html)
-        
-        # Attach the alternative part to main message
         msg.attach(msg_alternative)
-        
-        # Embed the QR code for scanning in email body
-        if qr_image_bytes:
-            qr_attachment = MIMEImage(qr_image_bytes)
-            qr_attachment.add_header('Content-ID', '<qr_code>')
-            qr_attachment.add_header('Content-Disposition', 'inline', filename=f"{pet_name}_{product_name}_qr.png")
-            msg.attach(qr_attachment)
         
         # Attach the full reminder card image as attachment
         reminder_card_attachment = MIMEImage(reminder_image_bytes)
