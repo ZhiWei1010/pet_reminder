@@ -11,6 +11,11 @@ import urllib.parse
 import hashlib
 import boto3
 import math
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+import re
 
 # Configure page with mobile optimization
 st.set_page_config(
@@ -19,17 +24,47 @@ st.set_page_config(
     layout="wide"
 )
 
-# AWS Configuration
-AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')
+# AWS Configuration - Use Streamlit secrets for cloud deployment
+if "AWS_REGION" in st.secrets:
+    # Production: Use Streamlit secrets
+    AWS_REGION = st.secrets["AWS_REGION"]
+    S3_BUCKET = st.secrets["S3_BUCKET_NAME"]
+    aws_access_key_id = st.secrets["AWS_ACCESS_KEY_ID"]
+    aws_secret_access_key = st.secrets["AWS_SECRET_ACCESS_KEY"]
+    
+    # Email Configuration from secrets
+    SMTP_SERVER = st.secrets.get("SMTP_SERVER", "smtp.gmail.com")
+    SMTP_PORT = int(st.secrets.get("SMTP_PORT", "587"))
+    EMAIL_USER = st.secrets.get("EMAIL_USER", "")
+    EMAIL_PASSWORD = st.secrets.get("EMAIL_PASSWORD", "")
+else:
+    # Development: Use environment variables
+    AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+    S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')
+    aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
+    aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+    
+    # Email Configuration
+    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+    SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+    EMAIL_USER = os.getenv('EMAIL_USER', '')
+    EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', '')
 
-# Initialize AWS client with credentials from environment variables
-s3_client = boto3.client(
-    's3',
-    region_name=AWS_REGION,
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-)
+# Initialize AWS client
+try:
+    s3_client = boto3.client(
+        's3',
+        region_name=AWS_REGION,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key
+    )
+    # Test AWS connection
+    s3_client.list_buckets()
+    AWS_CONFIGURED = True
+except Exception as e:
+    AWS_CONFIGURED = False
+    st.error(f"⚠️ AWS S3 not configured properly: {str(e)}")
+    st.info("Some features may be limited without S3 configuration.")
 
 # Initialize session state for persistence
 def init_session_state():
@@ -48,6 +83,82 @@ def init_session_state():
     # Generation status
     if 'content_generated' not in st.session_state:
         st.session_state.content_generated = False
+
+def validate_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
+    """Send email with QR reminder card and calendar file as attachments"""
+    try:
+        if not EMAIL_USER or not EMAIL_PASSWORD:
+            return False, "Email configuration not set. Please configure SMTP settings."
+        
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_USER
+        msg['To'] = recipient_email
+        msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
+        
+        # Create email body
+        body = f"""
+Hello!
+
+Please find attached the QR Reminder Card for your pet's medication schedule.
+
+📋 Reminder Details:
+• Pet Name: {pet_name}
+• Product: {product_name}
+• Start Date: {reminder_details['start_date']}
+• End Date: {reminder_details['end_date']}
+• Frequency: {reminder_details['frequency']}
+• Duration: {reminder_details['duration']}
+• Total Reminders: {reminder_details['total_reminders']}
+
+⏰ Reminder Times:
+"""
+        for time_info in reminder_details['times']:
+            body += f"• {time_info['time']} - {time_info['label']}\n"
+        
+        if reminder_details.get('notes'):
+            body += f"\n📝 Additional Notes:\n{reminder_details['notes']}\n"
+        
+        body += """
+📱 How to use:
+1. Save the QR Reminder Card image to your phone
+2. Scan the QR code or long press it to open the reminder page
+3. Download the calendar file (.ics) to add reminders to your calendar
+4. Alternatively, use the attached calendar file directly
+
+Best regards,
+Pet Reminder System
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Attach QR reminder card image
+        img_attachment = MIMEImage(reminder_image_bytes)
+        img_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_reminder_card.png"')
+        msg.attach(img_attachment)
+        
+        # Attach calendar file
+        calendar_attachment = MIMEText(calendar_data, 'calendar')
+        calendar_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_calendar.ics"')
+        msg.attach(calendar_attachment)
+        
+        # Send email
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(EMAIL_USER, recipient_email, text)
+        server.quit()
+        
+        return True, "Email sent successfully!"
+        
+    except Exception as e:
+        return False, f"Failed to send email: {str(e)}"
 
 def save_form_data(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes):
     """Save current form data to session state"""
@@ -140,6 +251,14 @@ def get_fallback_font(size):
 
 def get_next_sequence_number():
     """Get next sequence number from S3 or start from 1"""
+    if not AWS_CONFIGURED:
+        # Fallback to session state if S3 not available
+        if 'pet_counter' not in st.session_state:
+            st.session_state.pet_counter = 1
+        else:
+            st.session_state.pet_counter += 1
+        return st.session_state.pet_counter
+    
     try:
         # Try to get current counter from S3
         response = s3_client.get_object(Bucket=S3_BUCKET, Key='system/counter.txt')
@@ -250,6 +369,10 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
 
 def upload_to_s3(calendar_data, file_id):
     """Upload calendar file to S3 and return public URL"""
+    if not AWS_CONFIGURED:
+        st.warning("⚠️ S3 not configured. Calendar file will be available for download only.")
+        return None
+        
     try:
         s3_client.put_object(
             Bucket=S3_BUCKET,
@@ -266,6 +389,9 @@ def upload_to_s3(calendar_data, file_id):
 
 def upload_reminder_image_to_s3(image_bytes, file_id):
     """Upload reminder image to S3 and return public URL"""
+    if not AWS_CONFIGURED:
+        return None
+        
     try:
         s3_client.put_object(
             Bucket=S3_BUCKET,
@@ -632,6 +758,9 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
 
 def upload_web_page_to_s3(html_content, page_id):
     """Upload HTML page to S3 and return public URL"""
+    if not AWS_CONFIGURED:
+        return None
+        
     try:
         s3_client.put_object(
             Bucket=S3_BUCKET,
@@ -882,58 +1011,57 @@ def generate_content(pet_name, product_name, start_date, end_date, frequency, fr
         )
         
         meaningful_id = generate_meaningful_id(pet_name, product_name)
+        
+        # Create calendar URL (may be None if S3 not configured)
         calendar_url = upload_to_s3(calendar_data, meaningful_id)
         
+        reminder_details = {
+            'frequency': frequency,
+            'frequency_value': frequency_value,
+            'start_date': start_date.strftime('%Y-%m-%d'),
+            'end_date': end_date.strftime('%Y-%m-%d'),
+            'duration': duration_text,
+            'total_reminders': total_reminders,
+            'times': selected_times,
+            'notes': notes
+        }
+        
+        # Create web page (may be None if S3 not configured)
+        web_page_url = None
         if calendar_url:
-            reminder_details = {
-                'frequency': frequency,
-                'frequency_value': frequency_value,
-                'start_date': start_date.strftime('%Y-%m-%d'),
-                'end_date': end_date.strftime('%Y-%m-%d'),
-                'duration': duration_text,
-                'total_reminders': total_reminders,
-                'times': selected_times,
-                'notes': notes
-            }
-            
             html_content = create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
             web_page_url = upload_web_page_to_s3(html_content, meaningful_id)
-            
-            if web_page_url:
-                qr_image_bytes = generate_qr_code(web_page_url)
-                
-                # Generate the combined reminder image
-                reminder_image = create_reminder_image(pet_name, product_name, reminder_details, qr_image_bytes)
-                
-                # Convert PIL image to bytes for download
-                img_buffer = io.BytesIO()
-                reminder_image.save(img_buffer, format='PNG', quality=95, dpi=(300, 300))
-                reminder_image_bytes = img_buffer.getvalue()
-                
-                # Upload reminder image to S3
-                reminder_image_url = upload_reminder_image_to_s3(reminder_image_bytes, meaningful_id)
-                
-                # Save everything to session state
-                st.session_state.generated_content = {
-                    'meaningful_id': meaningful_id,
-                    'reminder_image_bytes': reminder_image_bytes,
-                    'qr_image_bytes': qr_image_bytes,
-                    'calendar_data': calendar_data,
-                    'web_page_url': web_page_url,
-                    'calendar_url': calendar_url,
-                    'reminder_image_url': reminder_image_url,
-                    'reminder_details': reminder_details,
-                    'pet_name': pet_name,
-                    'product_name': product_name
-                }
-                st.session_state.content_generated = True
-                return True
-            else:
-                st.error("❌ Failed to create web page - check S3 permissions")
-                return False
-        else:
-            st.error("❌ Failed to upload calendar file - check S3 configuration")
-            return False
+        
+        # Generate QR code (use a fallback URL if web page not available)
+        qr_target = web_page_url if web_page_url else f"data:text/plain,{pet_name} - {product_name} Reminder"
+        qr_image_bytes = generate_qr_code(qr_target)
+        
+        # Generate the combined reminder image
+        reminder_image = create_reminder_image(pet_name, product_name, reminder_details, qr_image_bytes)
+        
+        # Convert PIL image to bytes for download
+        img_buffer = io.BytesIO()
+        reminder_image.save(img_buffer, format='PNG', quality=95, dpi=(300, 300))
+        reminder_image_bytes = img_buffer.getvalue()
+        
+        # Upload reminder image to S3 (optional)
+        reminder_image_url = upload_reminder_image_to_s3(reminder_image_bytes, meaningful_id)
+        
+        # Save everything to session state
+        st.session_state.generated_content = {
+            'meaningful_id': meaningful_id,
+            'reminder_image_bytes': reminder_image_bytes,
+            'qr_image_bytes': qr_image_bytes,
+            'calendar_data': calendar_data,
+            'web_page_url': web_page_url,
+            'calendar_url': calendar_url,
+            'reminder_image_url': reminder_image_url,
+            'reminder_details': reminder_details,
+            'pet_name': pet_name,
+            'product_name': product_name
+        }
+        st.session_state.content_generated = True
+        return True
         
     except Exception as e:
         st.error(f"Error generating content: {str(e)}")
@@ -975,13 +1103,114 @@ def display_generated_content():
             key="download_calendar"
         )
     
+    # NEW EMAIL SECTION
+    with st.expander("📧 Email Reminder Card"):
+        if not EMAIL_USER or not EMAIL_PASSWORD:
+            st.warning("⚠️ Email configuration not set. Please configure SMTP settings in environment variables.")
+            st.info("""
+            **Required Environment Variables:**
+            - `EMAIL_USER`: Your email address
+            - `EMAIL_PASSWORD`: Your email app password
+            - `SMTP_SERVER`: SMTP server (default: smtp.gmail.com)
+            - `SMTP_PORT`: SMTP port (default: 587)
+            """)
+        else:
+            recipient_email = st.text_input(
+                "Recipient Email Address",
+                placeholder="example@email.com",
+                key="recipient_email"
+            )
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("📧 Send Email", type="primary", key="send_email_btn"):
+                    if recipient_email and validate_email(recipient_email):
+                        with st.spinner("Sending email..."):
+                            success, message = send_email_with_attachment(
+                                recipient_email=recipient_email,
+                                pet_name=content['pet_name'],
+                                product_name=content['product_name'],
+                                reminder_image_bytes=content['reminder_image_bytes'],
+                                calendar_data=content['calendar_data'],
+                                reminder_details=content['reminder_details']
+                            )
+                            
+                            if success:
+                                st.success(f"✅ {message}")
+                            else:
+                                st.error(f"❌ {message}")
+                    elif not recipient_email:
+                        st.warning("⚠️ Please enter recipient email address")
+                    else:
+                        st.warning("⚠️ Please enter a valid email address")
+            
+            with col2:
+                if st.button("📧 Send to Multiple", key="send_multiple_btn"):
+                    st.info("💡 Tip: Copy and paste multiple email addresses separated by commas")
+                    
+            # Multiple email addresses input
+            if st.session_state.get('send_multiple_btn', False):
+                multiple_emails = st.text_area(
+                    "Multiple Email Addresses (comma-separated)",
+                    placeholder="email1@example.com, email2@example.com, email3@example.com",
+                    key="multiple_emails"
+                )
+                
+                if st.button("📧 Send to All", type="primary", key="send_all_btn"):
+                    if multiple_emails:
+                        email_list = [email.strip() for email in multiple_emails.split(',') if email.strip()]
+                        valid_emails = [email for email in email_list if validate_email(email)]
+                        invalid_emails = [email for email in email_list if not validate_email(email)]
+                        
+                        if invalid_emails:
+                            st.warning(f"⚠️ Invalid email addresses: {', '.join(invalid_emails)}")
+                        
+                        if valid_emails:
+                            with st.spinner(f"Sending emails to {len(valid_emails)} recipients..."):
+                                sent_count = 0
+                                failed_count = 0
+                                
+                                for email in valid_emails:
+                                    success, message = send_email_with_attachment(
+                                        recipient_email=email,
+                                        pet_name=content['pet_name'],
+                                        product_name=content['product_name'],
+                                        reminder_image_bytes=content['reminder_image_bytes'],
+                                        calendar_data=content['calendar_data'],
+                                        reminder_details=content['reminder_details']
+                                    )
+                                    
+                                    if success:
+                                        sent_count += 1
+                                    else:
+                                        failed_count += 1
+                                        st.error(f"❌ Failed to send to {email}: {message}")
+                                
+                                if sent_count > 0:
+                                    st.success(f"✅ Successfully sent to {sent_count} recipients!")
+                                if failed_count > 0:
+                                    st.error(f"❌ Failed to send to {failed_count} recipients")
+                    else:
+                        st.warning("⚠️ Please enter at least one email address")
+    
     with st.expander("🔗 URLs"):
-        st.write(f"**QR Web Page URL:** {content['web_page_url']}")
-        st.write(f"**Calendar File URL:** {content['calendar_url']}")
+        if content['web_page_url']:
+            st.write(f"**QR Web Page URL:** {content['web_page_url']}")
+        else:
+            st.write("**QR Web Page URL:** ❌ S3 not configured")
+            
+        if content['calendar_url']:
+            st.write(f"**Calendar File URL:** {content['calendar_url']}")
+        else:
+            st.write("**Calendar File URL:** ❌ S3 not configured")
+            
         if content['reminder_image_url']:
             st.write(f"**Reminder Card URL:** {content['reminder_image_url']}")
-        else:
+        elif AWS_CONFIGURED:
             st.write("**Reminder Card URL:** ❌ Upload failed")
+        else:
+            st.write("**Reminder Card URL:** ❌ S3 not configured")
             
     with st.expander("📋 Reminder Summary"):
         details = content['reminder_details']
@@ -1365,6 +1594,68 @@ def main():
             display_generated_content()
         else:
             st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
+            
+            # Email configuration status
+            st.markdown("---")
+            st.markdown("**📧 Email Feature Status:**")
+            if EMAIL_USER and EMAIL_PASSWORD:
+                st.success("✅ Email configuration is set up")
+            else:
+                st.warning("⚠️ Email not configured")
+                with st.expander("📧 How to set up email"):
+                    st.markdown("""
+                    **To enable email functionality, add these to your Streamlit secrets:**
+                    
+                    **In Streamlit Cloud:**
+                    1. Go to your app settings
+                    2. Click on "Secrets" tab
+                    3. Add the following secrets:
+                    
+                    ```toml
+                    # Email configuration
+                    EMAIL_USER = "your-email@gmail.com"
+                    EMAIL_PASSWORD = "your-app-password"
+                    SMTP_SERVER = "smtp.gmail.com"
+                    SMTP_PORT = "587"
+                    ```
+                    
+                    **For Gmail:**
+                    1. Enable 2-factor authentication on your Google account
+                    2. Generate an "App Password" in your Google Account settings
+                    3. Use the app password (not your regular password) for EMAIL_PASSWORD
+                    
+                    **For other email providers:**
+                    - Update SMTP_SERVER and SMTP_PORT accordingly
+                    - Use your email provider's SMTP settings
+                    """)
+                    
+            st.markdown("**🗂️ AWS S3 Status:**")
+            if AWS_CONFIGURED:
+                st.success("✅ AWS S3 is configured and working")
+            else:
+                st.warning("⚠️ AWS S3 not configured")
+                with st.expander("🗂️ How to set up AWS S3"):
+                    st.markdown("""
+                    **To enable full QR functionality, add these to your Streamlit secrets:**
+                    
+                    ```toml
+                    # AWS S3 configuration
+                    AWS_REGION = "us-east-1"
+                    S3_BUCKET_NAME = "your-bucket-name"
+                    AWS_ACCESS_KEY_ID = "your-access-key"
+                    AWS_SECRET_ACCESS_KEY = "your-secret-key"
+                    ```
+                    
+                    **AWS Setup Steps:**
+                    1. Create an S3 bucket in AWS
+                    2. Create an IAM user with S3 permissions
+                    3. Generate access keys for the IAM user
+                    4. Make sure the bucket allows public read access for generated files
+                    
+                    **Note:** The app will work without S3, but QR codes won't link to web pages.
+                    """)
+                    
+            st.info("💡 **Note:** The app works without AWS S3, but some features are limited. You can still generate and download reminder cards and calendar files!")
 
 if __name__ == "__main__":
     main()
