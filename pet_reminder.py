@@ -1655,7 +1655,7 @@ def display_generated_content():
                         st.warning("⚠️ Please enter a valid email address")
             
             with col2:
-                if st.button("📧 Send to Multiple", key="send_multiple_btn"):
+                #if st.button("📧 Send to Multiple", key="send_multiple_btn"):
                     st.info("💡 Tip: Copy and paste multiple email addresses separated by commas")
                     
             # Multiple email addresses input
