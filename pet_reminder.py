@@ -16,6 +16,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 import re
+import uuid
 
 # Configure page with mobile optimization
 st.set_page_config(
@@ -129,16 +130,14 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             # Fallback URL if web page not available
             web_page_url = f"https://example.com/reminder/{pet_name}_{product_name}"
         
-        # Convert QR code to base64 for embedding
-        qr_base64 = ""
-        if qr_image_bytes:
-            qr_base64 = base64.b64encode(qr_image_bytes).decode('utf-8')
-        
-        # Create message
+        # Create message with related multipart for embedded images
         msg = MIMEMultipart('related')
         msg['From'] = EMAIL_USER
         msg['To'] = recipient_email
         msg['Subject'] = f"🐾 Pet QR Reminder Card - {pet_name} ({product_name}) 🐾"
+        
+        # Generate unique CID for QR code
+        qr_cid = f"qr_code_{uuid.uuid4().hex}"
         
         # Gmail Mobile Optimized HTML - Simplified layout with tables
         html_body = f"""
@@ -440,12 +439,12 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                         
                         {f'''
                         <div style="text-align: center; margin: 15px 0;">
-                            <img src="data:image/png;base64,{qr_base64}" 
+                            <img src="cid:{qr_cid}" 
                                  alt="QR Code for Pet Reminder" 
                                  class="qr-image"
                                  style="width: 200px; height: 200px; display: block; margin: 0 auto; border: 2px solid #00e47c; padding: 10px; background-color: white;" />
                         </div>
-                        ''' if qr_base64 else '''
+                        ''' if qr_image_bytes else '''
                         <div style="text-align: center; margin: 15px 0;">
                             <div style="width: 200px; height: 200px; background: #f0f0f0; display: inline-block; border: 2px solid #00e47c; padding: 10px; color: #666; line-height: 180px; font-size: 14px;">QR Code Not Available</div>
                         </div>
@@ -590,6 +589,13 @@ Pet Reminder System
         msg_alternative.attach(part_text)
         msg_alternative.attach(part_html)
         msg.attach(msg_alternative)
+        
+        # Embed QR code as related attachment (CID) - Gmail compatible
+        if qr_image_bytes:
+            qr_embedded = MIMEImage(qr_image_bytes)
+            qr_embedded.add_header('Content-ID', f'<{qr_cid}>')
+            qr_embedded.add_header('Content-Disposition', 'inline', filename=f"{pet_name}_qr_code.png")
+            msg.attach(qr_embedded)
         
         # Attach the full reminder card image as attachment
         reminder_card_attachment = MIMEImage(reminder_image_bytes)
