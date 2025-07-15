@@ -47,9 +47,23 @@ if 'pet_counter' not in st.session_state:
 def send_simple_email(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, meaningful_id):
     """Simple email function using Gmail with Streamlit secrets"""
     try:
+        # Debug: Check if secrets exist
+        if "GMAIL_USER" not in st.secrets:
+            return False, "GMAIL_USER not found in secrets"
+        if "GMAIL_PASSWORD" not in st.secrets:
+            return False, "GMAIL_PASSWORD not found in secrets"
+        
         # Get Gmail credentials from Streamlit secrets
         gmail_user = st.secrets["GMAIL_USER"]
         gmail_password = st.secrets["GMAIL_PASSWORD"]
+        
+        # Debug: Check if credentials are not empty
+        if not gmail_user or not gmail_password:
+            return False, "Gmail credentials are empty"
+        
+        # Validate email format
+        if "@" not in recipient_email or "." not in recipient_email:
+            return False, "Invalid recipient email format"
         
         # Create email
         msg = MIMEMultipart()
@@ -89,20 +103,26 @@ Pet Reminder System 🐾
         cal_attachment.add_header('Content-Disposition', f'attachment; filename="{meaningful_id}.ics"')
         msg.attach(cal_attachment)
         
-        # Send email
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(gmail_user, gmail_password)
-        text = msg.as_string()
-        server.sendmail(gmail_user, recipient_email, text)
-        server.quit()
-        
-        return True, "Email sent successfully!"
+        # Send email with detailed error handling
+        try:
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(gmail_user, gmail_password)
+            text = msg.as_string()
+            server.sendmail(gmail_user, recipient_email, text)
+            server.quit()
+            return True, "Email sent successfully!"
+        except smtplib.SMTPAuthenticationError:
+            return False, "Gmail authentication failed. Check your email and app password."
+        except smtplib.SMTPException as smtp_e:
+            return False, f"SMTP error: {str(smtp_e)}"
+        except Exception as send_e:
+            return False, f"Error sending email: {str(send_e)}"
         
     except KeyError as e:
         return False, f"Gmail credentials not configured in secrets: {str(e)}"
     except Exception as e:
-        return False, f"Error: {str(e)}"
+        return False, f"Unexpected error: {str(e)}"
 
 def calculate_reminder_count(start_date, end_date, frequency, frequency_value=None):
     """Calculate total number of reminders based on date range and frequency"""
