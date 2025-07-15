@@ -637,11 +637,11 @@ Pet Reminder System
             msg.attach(qr_embedded)
         
         # Embed BI Logo as related attachment (CID) - Gmail compatible
-        if logo_image_bytes:
-            logo_embedded = MIMEImage(logo_image_bytes)
-            logo_embedded.add_header('Content-ID', f'<{logo_cid}>')
-            logo_embedded.add_header('Content-Disposition', 'inline', filename="bi_logo.png")
-            msg.attach(logo_embedded)
+        #if logo_image_bytes:
+            #logo_embedded = MIMEImage(logo_image_bytes)
+            #logo_embedded.add_header('Content-ID', f'<{logo_cid}>')
+            #logo_embedded.add_header('Content-Disposition', 'inline', filename="bi_logo.png")
+            #msg.attach(logo_embedded)
         
         # Attach the full reminder card image as attachment
         reminder_card_attachment = MIMEImage(reminder_image_bytes)
@@ -2092,13 +2092,16 @@ def main():
             st.session_state.content_generated = False
             st.rerun()
     with col2:
-        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         
+	st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
+	
         # Display generated content if available
         if st.session_state.content_generated and st.session_state.generated_content:
             display_generated_content()
+	    
         else:
             st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
-                        
+
+			
 if __name__ == "__main__":
-    main()        
+    main()
