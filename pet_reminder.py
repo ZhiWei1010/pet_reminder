@@ -272,8 +272,7 @@ Pet Reminder System
             justify-content: center;
         }}
         
-        .card-title::before {{
-            content: "🖼️";
+        .card-title-icon {{
             margin-right: 10px;
             font-size: 24px;
         }}
@@ -310,8 +309,7 @@ Pet Reminder System
             align-items: center;
         }}
         
-        .section-title::before {{
-            content: "📋";
+        .section-title-icon {{
             margin-right: 10px;
             font-size: 22px;
         }}
@@ -363,8 +361,7 @@ Pet Reminder System
             align-items: center;
         }}
         
-        .times-title::before {{
-            content: "⏰";
+        .times-title-icon {{
             margin-right: 10px;
             font-size: 20px;
         }}
@@ -392,8 +389,7 @@ Pet Reminder System
             align-items: center;
         }}
         
-        .notes-title::before {{
-            content: "📝";
+        .notes-title-icon {{
             margin-right: 10px;
             font-size: 20px;
         }}
@@ -425,8 +421,7 @@ Pet Reminder System
             align-items: center;
         }}
         
-        .instructions-title::before {{
-            content: "📱";
+        .instructions-title-icon {{
             margin-right: 10px;
             font-size: 22px;
         }}
@@ -447,8 +442,7 @@ Pet Reminder System
             border-bottom: none;
         }}
         
-        .instructions-list li::before {{
-            content: "✅";
+        .instructions-list-icon {{
             margin-right: 10px;
         }}
         
@@ -471,8 +465,7 @@ Pet Reminder System
             justify-content: center;
         }}
         
-        .attachment-notice-title::before {{
-            content: "📎";
+        .attachment-notice-title-icon {{
             margin-right: 10px;
             font-size: 20px;
         }}
@@ -535,7 +528,9 @@ Pet Reminder System
         
         <div class="content">
             <div class="reminder-card-section">
-                <div class="card-title">Your Reminder Card</div>
+                <div class="card-title">
+                    <span class="card-title-icon">🖼️</span>Your Reminder Card
+                </div>
                 <img src="{reminder_card_data_url}" alt="Pet Reminder Card for {pet_name}" class="reminder-card-image">
                 <div class="card-description">
                     Save this image to your phone or print it for easy reference. 
@@ -544,7 +539,9 @@ Pet Reminder System
             </div>
             
             <div class="summary-section">
-                <div class="section-title">Reminder Summary</div>
+                <div class="section-title">
+                    <span class="section-title-icon">📋</span>Reminder Summary
+                </div>
                 
                 <div class="detail-grid">
                     <div class="detail-item">
@@ -580,7 +577,9 @@ Pet Reminder System
             </div>
             
             <div class="times-section">
-                <div class="times-title">Daily Reminder Times</div>
+                <div class="times-title">
+                    <span class="times-title-icon">⏰</span>Daily Reminder Times
+                </div>
                 <ul class="times-list">
                     {times_html_list}
                 </ul>
@@ -588,13 +587,17 @@ Pet Reminder System
             
             {f'''
             <div class="notes-section">
-                <div class="notes-title">Additional Notes</div>
+                <div class="notes-title">
+                    <span class="notes-title-icon">📝</span>Additional Notes
+                </div>
                 <div class="notes-text">{reminder_details['notes']}</div>
             </div>
             ''' if reminder_details.get('notes') and reminder_details['notes'].strip() else ''}
             
             <div class="attachment-notice">
-                <div class="attachment-notice-title">Calendar File Attached</div>
+                <div class="attachment-notice-title">
+                    <span class="attachment-notice-title-icon">📎</span>Calendar File Attached
+                </div>
                 <div class="attachment-text">
                     A calendar file (.ics) is attached to this email. Download and import it into your 
                     preferred calendar app (Google Calendar, Apple Calendar, Outlook, etc.) to receive 
@@ -603,13 +606,15 @@ Pet Reminder System
             </div>
             
             <div class="instructions">
-                <div class="instructions-title">How to Use This Reminder</div>
+                <div class="instructions-title">
+                    <span class="instructions-title-icon">📱</span>How to Use This Reminder
+                </div>
                 <ul class="instructions-list">
-                    <li>Save the reminder card image above to your phone or print it</li>
-                    <li>Download the attached calendar file (.ics)</li>
-                    <li>Import the calendar file into your preferred calendar app</li>
-                    <li>Enable notifications to receive alerts at medication times</li>
-                    <li>Scan the QR code anytime for quick access to reminder details</li>
+                    <li><span class="instructions-list-icon">✅</span>Save the reminder card image above to your phone or print it</li>
+                    <li><span class="instructions-list-icon">✅</span>Download the attached calendar file (.ics)</li>
+                    <li><span class="instructions-list-icon">✅</span>Import the calendar file into your preferred calendar app</li>
+                    <li><span class="instructions-list-icon">✅</span>Enable notifications to receive alerts at medication times</li>
+                    <li><span class="instructions-list-icon">✅</span>Scan the QR code anytime for quick access to reminder details</li>
                 </ul>
             </div>
         </div>
