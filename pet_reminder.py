@@ -2092,7 +2092,6 @@ def main():
             st.session_state.content_generated = False
             st.rerun()
     with col2:
-        
 	st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
 	
         # Display generated content if available
@@ -2103,5 +2102,6 @@ def main():
             st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
 
 			
+
 if __name__ == "__main__":
     main()
