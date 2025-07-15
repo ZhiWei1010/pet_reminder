@@ -1594,68 +1594,6 @@ def main():
             display_generated_content()
         else:
             st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
-            
-            # Email configuration status
-            st.markdown("---")
-            st.markdown("**📧 Email Feature Status:**")
-            if EMAIL_USER and EMAIL_PASSWORD:
-                st.success("✅ Email configuration is set up")
-            else:
-                st.warning("⚠️ Email not configured")
-                with st.expander("📧 How to set up email"):
-                    st.markdown("""
-                    **To enable email functionality, add these to your Streamlit secrets:**
-                    
-                    **In Streamlit Cloud:**
-                    1. Go to your app settings
-                    2. Click on "Secrets" tab
-                    3. Add the following secrets:
-                    
-                    ```toml
-                    # Email configuration
-                    EMAIL_USER = "your-email@gmail.com"
-                    EMAIL_PASSWORD = "your-app-password"
-                    SMTP_SERVER = "smtp.gmail.com"
-                    SMTP_PORT = "587"
-                    ```
-                    
-                    **For Gmail:**
-                    1. Enable 2-factor authentication on your Google account
-                    2. Generate an "App Password" in your Google Account settings
-                    3. Use the app password (not your regular password) for EMAIL_PASSWORD
-                    
-                    **For other email providers:**
-                    - Update SMTP_SERVER and SMTP_PORT accordingly
-                    - Use your email provider's SMTP settings
-                    """)
-                    
-            st.markdown("**🗂️ AWS S3 Status:**")
-            if AWS_CONFIGURED:
-                st.success("✅ AWS S3 is configured and working")
-            else:
-                st.warning("⚠️ AWS S3 not configured")
-                with st.expander("🗂️ How to set up AWS S3"):
-                    st.markdown("""
-                    **To enable full QR functionality, add these to your Streamlit secrets:**
-                    
-                    ```toml
-                    # AWS S3 configuration
-                    AWS_REGION = "us-east-1"
-                    S3_BUCKET_NAME = "your-bucket-name"
-                    AWS_ACCESS_KEY_ID = "your-access-key"
-                    AWS_SECRET_ACCESS_KEY = "your-secret-key"
-                    ```
-                    
-                    **AWS Setup Steps:**
-                    1. Create an S3 bucket in AWS
-                    2. Create an IAM user with S3 permissions
-                    3. Generate access keys for the IAM user
-                    4. Make sure the bucket allows public read access for generated files
-                    
-                    **Note:** The app will work without S3, but QR codes won't link to web pages.
-                    """)
-                    
-            st.info("💡 **Note:** The app works without AWS S3, but some features are limited. You can still generate and download reminder cards and calendar files!")
-
+                        
 if __name__ == "__main__":
     main()
