@@ -90,16 +90,19 @@ def validate_email(email):
     return re.match(pattern, email) is not None
 
 def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
-    """Send email with QR reminder card and calendar file as attachments"""
+    """Send email with reminder card embedded in body and calendar file as attachment"""
     try:
         if not EMAIL_USER or not EMAIL_PASSWORD:
             return False, "Email configuration not set. Please configure SMTP settings."
         
         # Create message
-        msg = MIMEMultipart('alternative')
+        msg = MIMEMultipart('related')  # 'related' for embedded images
         msg['From'] = EMAIL_USER
         msg['To'] = recipient_email
         msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
+        
+        # Create alternative container for HTML and plain text
+        msg_alternative = MIMEMultipart('alternative')
         
         # Create plain text version (fallback)
         plain_text = f"""
@@ -107,7 +110,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
 
 Hello!
 
-Please find attached the QR Reminder Card for your pet's medication schedule.
+Here is your personalized pet medication reminder card and calendar file.
 
 📋 Reminder Details:
 • Pet Name: {pet_name}
@@ -128,15 +131,16 @@ Please find attached the QR Reminder Card for your pet's medication schedule.
         
         plain_text += """
 📱 How to use:
-1. Save the QR Reminder Card image to your phone
-2. Scan the QR code or long press it to open the reminder page
-3. Download the calendar file (.ics) to add reminders to your calendar
+1. Save this email for reference
+2. Download the attached calendar file (.ics)
+3. Import the calendar file into your preferred calendar app
+4. Set up notifications as needed
 
 Best regards,
 Pet Reminder System
         """
         
-        # Create HTML version (styled like reminder card)
+        # Create HTML version with embedded reminder card
         # Base64 encode the logo for email embedding
         logo_data_url = ""
         if os.path.exists("BI-Logo-2.png"):
@@ -156,10 +160,14 @@ Pet Reminder System
             except:
                 pass
         
+        # Embed the reminder card image
+        reminder_card_b64 = base64.b64encode(reminder_image_bytes).decode()
+        reminder_card_data_url = f"data:image/png;base64,{reminder_card_b64}"
+        
         # Format reminder times for HTML display
         times_html_list = ""
         for t in reminder_details['times']:
-            times_html_list += f"<li style='margin: 8px 0; color: #ffffff;'>{t['time']} - <strong>{t['label']}</strong></li>"
+            times_html_list += f"<li style='margin: 8px 0; color: #333333; padding: 8px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid #00e47c;'>{t['time']} - <strong>{t['label']}</strong></li>"
         
         # Format frequency for display
         frequency_text = reminder_details['frequency']
@@ -190,7 +198,7 @@ Pet Reminder System
         }}
         
         .email-container {{
-            max-width: 600px;
+            max-width: 800px;
             margin: 0 auto;
             background: #ffffff;
             border-radius: 15px;
@@ -228,46 +236,76 @@ Pet Reminder System
             color: #00e47c;
         }}
         
-        .pet-name {{
-            font-size: 28px;
+        .email-title {{
+            font-size: 24px;
             font-weight: bold;
             color: #00e47c;
             margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
         }}
         
-        .medication {{
-            font-size: 18px;
+        .greeting {{
+            font-size: 16px;
             color: #ffffff;
             opacity: 0.9;
-            margin-bottom: 0;
         }}
         
         .content {{
             padding: 30px;
         }}
         
-        .greeting {{
-            font-size: 18px;
-            color: #333333;
-            margin-bottom: 20px;
+        .reminder-card-section {{
             text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 15px;
+            border: 2px solid #00e47c;
         }}
         
-        .details-section {{
-            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        .card-title {{
+            font-size: 22px;
+            font-weight: bold;
+            color: #08312a;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        
+        .card-title::before {{
+            content: "🖼️";
+            margin-right: 10px;
+            font-size: 24px;
+        }}
+        
+        .reminder-card-image {{
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            border: 3px solid #00e47c;
+        }}
+        
+        .card-description {{
+            margin-top: 15px;
+            color: #666;
+            font-style: italic;
+            font-size: 14px;
+        }}
+        
+        .summary-section {{
+            background: rgba(0, 228, 124, 0.05);
             border: 2px solid #00e47c;
             border-radius: 15px;
             padding: 25px;
-            margin: 20px 0;
+            margin: 25px 0;
         }}
         
         .section-title {{
             font-size: 20px;
             font-weight: bold;
             color: #08312a;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
         }}
@@ -280,7 +318,7 @@ Pet Reminder System
         
         .detail-grid {{
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
         }}
@@ -290,7 +328,7 @@ Pet Reminder System
             padding: 15px;
             border-radius: 8px;
             border-left: 4px solid #00e47c;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         }}
         
         .detail-label {{
@@ -309,7 +347,7 @@ Pet Reminder System
         }}
         
         .times-section {{
-            background: rgba(0, 228, 124, 0.1);
+            background: #ffffff;
             border: 2px dashed #00e47c;
             border-radius: 10px;
             padding: 20px;
@@ -337,17 +375,6 @@ Pet Reminder System
             margin: 0;
         }}
         
-        .times-list li {{
-            background: #ffffff;
-            padding: 12px 15px;
-            margin: 8px 0;
-            border-radius: 8px;
-            border-left: 4px solid #00e47c;
-            color: #333333;
-            font-weight: 500;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-        }}
-        
         .notes-section {{
             background: rgba(255, 193, 7, 0.1);
             border: 2px dashed #ffc107;
@@ -360,7 +387,7 @@ Pet Reminder System
             font-size: 18px;
             color: #08312a;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
         }}
@@ -385,7 +412,7 @@ Pet Reminder System
             background: linear-gradient(135deg, #08312a, #0a3d33);
             color: #ffffff;
             padding: 25px;
-            border-radius: 10px;
+            border-radius: 15px;
             margin: 25px 0;
         }}
         
@@ -411,12 +438,224 @@ Pet Reminder System
         }}
         
         .instructions-list li {{
-            padding: 10px 0;
+            padding: 12px 0;
             border-bottom: 1px solid rgba(0, 228, 124, 0.2);
             font-size: 16px;
         }}
         
         .instructions-list li:last-child {{
+            border-bottom: none;
+        }}
+        
+        .instructions-list li::before {{
+            content: "✅";
+            margin-right: 10px;
+        }}
+        
+        .attachment-notice {{
+            background: #e8f5e8;
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 25px 0;
+            text-align: center;
+        }}
+        
+        .attachment-notice-title {{
+            font-size: 18px;
+            color: #155724;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        
+        .attachment-notice-title::before {{
+            content: "📎";
+            margin-right: 10px;
+            font-size: 20px;
+        }}
+        
+        .attachment-text {{
+            color: #155724;
+            font-size: 16px;
+            line-height: 1.5;
+        }}
+        
+        .footer {{
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid #dee2e6;
+        }}
+        
+        .footer-text {{
+            color: #6c757d;
+            font-size: 14px;
+            margin: 0;
+        }}
+        
+        .signature {{
+            color: #08312a;
+            font-weight: 600;
+            margin-top: 10px;
+        }}
+        
+        @media (max-width: 600px) {{
+            .email-container {{
+                margin: 10px;
+                border-radius: 10px;
+            }}
+            
+            .header, .content {{
+                padding: 20px;
+            }}
+            
+            .detail-grid {{
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }}
+            
+            .reminder-card-image {{
+                max-width: 100%;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo-container">
+                {f'<img src="{logo_data_url}" alt="BI Logo" class="logo-img">' if logo_data_url else '<div class="logo-fallback">🐾</div>'}
+            </div>
+            <div class="email-title">Pet Reminder Card</div>
+            <div class="greeting">Your personalized medication reminder for <strong>{pet_name}</strong></div>
+        </div>
+        
+        <div class="content">
+            <div class="reminder-card-section">
+                <div class="card-title">Your Reminder Card</div>
+                <img src="{reminder_card_data_url}" alt="Pet Reminder Card for {pet_name}" class="reminder-card-image">
+                <div class="card-description">
+                    Save this image to your phone or print it for easy reference. 
+                    Scan the QR code to access your reminder page anytime!
+                </div>
+            </div>
+            
+            <div class="summary-section">
+                <div class="section-title">Reminder Summary</div>
+                
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Pet Name</div>
+                        <div class="detail-value">{pet_name}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Product</div>
+                        <div class="detail-value">{product_name}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Frequency</div>
+                        <div class="detail-value">{frequency_text}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Duration</div>
+                        <div class="detail-value">{reminder_details['duration']}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Start Date</div>
+                        <div class="detail-value">{reminder_details['start_date']}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">End Date</div>
+                        <div class="detail-value">{reminder_details['end_date']}</div>
+                    </div>
+                </div>
+                
+                <div class="detail-item">
+                    <div class="detail-label">Total Reminders</div>
+                    <div class="detail-value">{reminder_details['total_reminders']} reminders scheduled</div>
+                </div>
+            </div>
+            
+            <div class="times-section">
+                <div class="times-title">Daily Reminder Times</div>
+                <ul class="times-list">
+                    {times_html_list}
+                </ul>
+            </div>
+            
+            {f'''
+            <div class="notes-section">
+                <div class="notes-title">Additional Notes</div>
+                <div class="notes-text">{reminder_details['notes']}</div>
+            </div>
+            ''' if reminder_details.get('notes') and reminder_details['notes'].strip() else ''}
+            
+            <div class="attachment-notice">
+                <div class="attachment-notice-title">Calendar File Attached</div>
+                <div class="attachment-text">
+                    A calendar file (.ics) is attached to this email. Download and import it into your 
+                    preferred calendar app (Google Calendar, Apple Calendar, Outlook, etc.) to receive 
+                    automatic notifications for each medication time.
+                </div>
+            </div>
+            
+            <div class="instructions">
+                <div class="instructions-title">How to Use This Reminder</div>
+                <ul class="instructions-list">
+                    <li>Save the reminder card image above to your phone or print it</li>
+                    <li>Download the attached calendar file (.ics)</li>
+                    <li>Import the calendar file into your preferred calendar app</li>
+                    <li>Enable notifications to receive alerts at medication times</li>
+                    <li>Scan the QR code anytime for quick access to reminder details</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p class="footer-text">
+                Keep this email for your records. The reminder card and calendar file contain all the information you need.
+            </p>
+            <p class="signature">
+                Best regards,<br>
+                <strong>Pet Reminder System</strong>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+        """
+        
+        # Create email parts
+        text_part = MIMEText(plain_text, 'plain', 'utf-8')
+        html_part = MIMEText(html_body, 'html', 'utf-8')
+        
+        # Add both parts to the alternative container
+        msg_alternative.attach(text_part)
+        msg_alternative.attach(html_part)
+        
+        # Add the alternative container to the main message
+        msg.attach(msg_alternative)
+        
+        # Attach ONLY the calendar file (reminder card is now embedded)
+        calendar_attachment = MIMEText(calendar_data, 'calendar')
+        calendar_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_calendar.ics"')
+        msg.attach(calendar_attachment)
+        
+        # Send email
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(EMAIL_USER, recipient_email, text)
+        server.quit()
+        
+        return True, "Email sent successfully!"
+        
+    except Exception as e:
+        return False, f"Failed to send email: {str(e)}"child {{
             border-bottom: none;
         }}
         
