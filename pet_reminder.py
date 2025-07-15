@@ -1474,22 +1474,22 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     # Instruction text below QR code
     instruction_y = qr_y + qr_size + 35
-    instruction_lines = [
-        "Scan (or) long press using Mobile",
-        "to add reminder to your Calendar"
-    ]
+    #instruction_lines = [
+    #    "Scan (or) long press using Mobile",
+    #    "to add reminder to your Calendar"
+    #]
     
-    for i, line in enumerate(instruction_lines):
-        # Calculate text width for centering (improved method)
-        try:
-            bbox = draw.textbbox((0, 0), line, font=detail_font)
-            line_width = bbox[2] - bbox[0]
-        except:
-            # Fallback calculation
-            line_width = len(line) * 12
-        
-        line_x = qr_section_x + (qr_section_width - line_width) // 2
-        draw.text((line_x, instruction_y + i * 25), line, fill=text_color, font=detail_font)
+    #for i, line in enumerate(instruction_lines):
+    #    # Calculate text width for centering (improved method)
+    #    try:
+    #        bbox = draw.textbbox((0, 0), line, font=detail_font)
+    #        line_width = bbox[2] - bbox[0]
+    #    except:
+    #        # Fallback calculation
+    #        line_width = len(line) * 12
+    #    
+    #    line_x = qr_section_x + (qr_section_width - line_width) // 2
+    #    draw.text((line_x, instruction_y + i * 25), line, fill=text_color, font=detail_font)
     
     # Add decorative elements
     # Top right corner accent
