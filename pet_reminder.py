@@ -12,6 +12,15 @@ import hashlib
 import boto3
 import math
 
+# Email imports
+import smtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+from email.mime.base import MIMEBase
+from email import encoders
+
 # Configure page with mobile optimization
 st.set_page_config(
     page_title="Pet Reminder",
@@ -19,21 +28,81 @@ st.set_page_config(
     layout="wide"
 )
 
-# AWS Configuration
-AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')
+# AWS Configuration from Streamlit secrets
+AWS_REGION = st.secrets["AWS_REGION"]
+S3_BUCKET = st.secrets["S3_BUCKET_NAME"]
 
-# Initialize AWS client with credentials from environment variables
+# Initialize AWS client with credentials from Streamlit secrets
 s3_client = boto3.client(
     's3',
     region_name=AWS_REGION,
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
+    aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
+    aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"]
 )
 
 # Global counter for generating sequential IDs
 if 'pet_counter' not in st.session_state:
     st.session_state.pet_counter = 1
+
+def send_simple_email(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, meaningful_id):
+    """Simple email function using Gmail with Streamlit secrets"""
+    try:
+        # Get Gmail credentials from Streamlit secrets
+        gmail_user = st.secrets["GMAIL_USER"]
+        gmail_password = st.secrets["GMAIL_PASSWORD"]
+        
+        # Create email
+        msg = MIMEMultipart()
+        msg['From'] = gmail_user
+        msg['To'] = recipient_email
+        msg['Subject'] = f"🐾 {pet_name} - {product_name} Medication Reminder"
+        
+        # Simple email body
+        body = f"""
+Hi!
+
+Your pet medication reminder for {pet_name} is attached.
+
+Pet: {pet_name}
+Medication: {product_name}
+
+Instructions:
+1. Print or save the attached reminder card
+2. Scan the QR code with your phone
+3. Add the calendar file to your phone's calendar
+
+Best regards,
+Pet Reminder System 🐾
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Attach reminder card image
+        img_attachment = MIMEImage(reminder_image_bytes)
+        img_attachment.add_header('Content-Disposition', f'attachment; filename="{meaningful_id}_reminder.png"')
+        msg.attach(img_attachment)
+        
+        # Attach calendar file
+        cal_attachment = MIMEBase('text', 'calendar')
+        cal_attachment.set_payload(calendar_data.encode('utf-8'))
+        encoders.encode_base64(cal_attachment)
+        cal_attachment.add_header('Content-Disposition', f'attachment; filename="{meaningful_id}.ics"')
+        msg.attach(cal_attachment)
+        
+        # Send email
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(gmail_user, gmail_password)
+        text = msg.as_string()
+        server.sendmail(gmail_user, recipient_email, text)
+        server.quit()
+        
+        return True, "Email sent successfully!"
+        
+    except KeyError as e:
+        return False, f"Gmail credentials not configured in secrets: {str(e)}"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
 
 def calculate_reminder_count(start_date, end_date, frequency, frequency_value=None):
     """Calculate total number of reminders based on date range and frequency"""
@@ -1167,6 +1236,32 @@ def main():
                                         file_name=f"{meaningful_id}.ics",
                                         mime="text/calendar"
                                     )
+                                
+                                # Email feature
+                                with st.expander("📧 Send via Email"):
+                                    st.write("📤 Send the reminder card directly to an email:")
+                                    
+                                    recipient_email = st.text_input("📧 Email Address", placeholder="someone@example.com")
+                                    
+                                    if st.button("📧 Send Email", key="send_email"):
+                                        if recipient_email and "@" in recipient_email:
+                                            with st.spinner("Sending email..."):
+                                                success, message = send_simple_email(
+                                                    recipient_email, 
+                                                    pet_name, 
+                                                    product_name, 
+                                                    reminder_image_bytes, 
+                                                    calendar_data, 
+                                                    meaningful_id
+                                                )
+                                                
+                                                if success:
+                                                    st.success(f"✅ Email sent to {recipient_email}!")
+                                                    st.balloons()
+                                                else:
+                                                    st.error(f"❌ {message}")
+                                        else:
+                                            st.warning("⚠️ Please enter a valid email address")
                                 
                                 with st.expander("🔗 URLs"):
                                     st.write(f"**QR Web Page URL:** {web_page_url}")
