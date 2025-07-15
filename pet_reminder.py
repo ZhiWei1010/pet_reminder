@@ -116,20 +116,23 @@ def generate_qr_svg(web_page_url):
     return svg_string
 
 def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
-    """Send email with SVG QR code in body and full reminder card as attachment"""
+    """Send email with base64 QR code embedded in body and full reminder card as attachment"""
     try:
         if not EMAIL_USER or not EMAIL_PASSWORD:
             return False, "Email configuration not set. Please configure SMTP settings."
         
-        # Get the web page URL from session state for QR generation
+        # Get the web page URL and QR code from session state
         web_page_url = st.session_state.generated_content.get('web_page_url') if st.session_state.generated_content else None
+        qr_image_bytes = st.session_state.generated_content.get('qr_image_bytes') if st.session_state.generated_content else None
         
         if not web_page_url:
             # Fallback URL if web page not available
             web_page_url = f"https://example.com/reminder/{pet_name}_{product_name}"
         
-        # Generate SVG QR code
-        qr_svg = generate_qr_svg(web_page_url)
+        # Convert QR code to base64 for embedding
+        qr_base64 = ""
+        if qr_image_bytes:
+            qr_base64 = base64.b64encode(qr_image_bytes).decode('utf-8')
         
         # Create message
         msg = MIMEMultipart('related')
@@ -137,7 +140,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         msg['To'] = recipient_email
         msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
         
-        # Create the HTML email body with SVG QR code
+        # Create the HTML email body with base64 encoded QR code
         html_body = f"""
 <!DOCTYPE html>
 <html>
@@ -191,15 +194,16 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         }}
         .qr-container {{
             display: inline-block;
-            padding: 20px;
+            padding: 15px;
             background: white;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }}
-        .qr-container svg {{
+        .qr-container img {{
             width: 150px;
             height: 150px;
             display: block;
+            border-radius: 5px;
         }}
         .qr-instructions {{
             margin-top: 15px;
@@ -215,6 +219,15 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             color: #007bff;
             text-decoration: none;
             font-weight: 600;
+        }}
+        .scan-tip {{
+            margin-top: 10px;
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #856404;
         }}
         .details-section {{
             background: #f8f9fa;
@@ -328,7 +341,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             .header h1 {{
                 font-size: 24px;
             }}
-            .qr-container svg {{
+            .qr-container img {{
                 width: 120px;
                 height: 120px;
             }}
@@ -352,13 +365,17 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         <div class="qr-section">
             <h2>📱 Scan QR Code</h2>
             <div class="qr-container">
-                {qr_svg}
+                {f'<img src="data:image/png;base64,{qr_base64}" alt="QR Code for Pet Reminder" />' if qr_base64 else '<div style="width:150px;height:150px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;border-radius:5px;">QR Code</div>'}
             </div>
             <div class="qr-instructions">
                 👆 Point your camera at the QR code above
             </div>
+            <div class="scan-tip">
+                💡 <strong>iPhone:</strong> Open Camera app and point at QR code<br>
+                💡 <strong>Android:</strong> Open Camera or Google Lens
+            </div>
             <div class="qr-link">
-                Or click here: <a href="{web_page_url}">Open Reminder Page</a>
+                Can't scan? <a href="{web_page_url}">Click here instead</a>
             </div>
         </div>
         
@@ -415,8 +432,8 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         
         <div class="instructions">
             <div class="instructions-title">📅 How to Use</div>
-            <div class="instruction-step">Scan the QR code above or click the link to access the reminder page</div>
-            <div class="instruction-step">Download the attached reminder card image for offline use</div>
+            <div class="instruction-step">Scan the QR code above with your phone camera</div>
+            <div class="instruction-step">Download the attached reminder card for offline use</div>
             <div class="instruction-step">Open the attached calendar file (.ics) to add reminders</div>
             <div class="instruction-step">Set notification preferences in your calendar app</div>
         </div>
@@ -455,9 +472,10 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         
         text_body += """
 📱 How to use:
-1. Click the reminder link above or scan the QR code (if viewing HTML email)
-2. Download the attached reminder card and calendar file
-3. Add the calendar file (.ics) to your calendar app
+1. Click the reminder link above to access the QR code page
+2. Scan the QR code with your phone camera
+3. Download the attached reminder card and calendar file
+4. Add the calendar file (.ics) to your calendar app
 
 📎 Attachments:
 • Full Reminder Card (PNG image)
