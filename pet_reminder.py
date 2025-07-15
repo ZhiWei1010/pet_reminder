@@ -1656,7 +1656,7 @@ def display_generated_content():
             
             with col2:
                 #if st.button("📧 Send to Multiple", key="send_multiple_btn"):
-                    st.info("💡 Tip: Copy and paste multiple email addresses separated by commas")
+                    #st.info("💡 Tip: Copy and paste multiple email addresses separated by commas")
                     
             # Multiple email addresses input
             if st.session_state.get('send_multiple_btn', False):
