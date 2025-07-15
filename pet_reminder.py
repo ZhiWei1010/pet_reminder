@@ -90,269 +90,52 @@ def validate_email(email):
     return re.match(pattern, email) is not None
 
 def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
-    """Send email with reminder card embedded in body and calendar file as attachment"""
+    """Send email with QR reminder card and calendar file as attachments"""
     try:
         if not EMAIL_USER or not EMAIL_PASSWORD:
             return False, "Email configuration not set. Please configure SMTP settings."
         
         # Create message
-        msg = MIMEMultipart('alternative')
+        msg = MIMEMultipart()
         msg['From'] = EMAIL_USER
         msg['To'] = recipient_email
         msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
         
-        # Create plain text version
-        plain_text = f"""Pet Reminder Card - {pet_name} ({product_name})
-
+        # Create email body
+        body = f"""
 Hello!
 
-Please find your personalized pet medication reminder card and calendar file.
+Please find attached the QR Reminder Card for your pet's medication schedule.
 
-Pet Name: {pet_name}
-Product: {product_name}
-Start Date: {reminder_details['start_date']}
-End Date: {reminder_details['end_date']}
-Frequency: {reminder_details['frequency']}
-Duration: {reminder_details['duration']}
-Total Reminders: {reminder_details['total_reminders']}
+📋 Reminder Details:
+• Pet Name: {pet_name}
+• Product: {product_name}
+• Start Date: {reminder_details['start_date']}
+• End Date: {reminder_details['end_date']}
+• Frequency: {reminder_details['frequency']}
+• Duration: {reminder_details['duration']}
+• Total Reminders: {reminder_details['total_reminders']}
 
-Reminder Times:
+⏰ Reminder Times:
 """
         for time_info in reminder_details['times']:
-            plain_text += f"• {time_info['time']} - {time_info['label']}\n"
+            body += f"• {time_info['time']} - {time_info['label']}\n"
         
         if reminder_details.get('notes'):
-            plain_text += f"\nAdditional Notes: {reminder_details['notes']}\n"
+            body += f"\n📝 Additional Notes:\n{reminder_details['notes']}\n"
         
-        plain_text += """
-How to use:
-1. View the reminder card image in this email
-2. Download the attached calendar file (.ics)
-3. Import the calendar file into your preferred calendar app
+        body += """
+📱 How to use:
+1. Save the QR Reminder Card image to your phone
+2. Scan the QR code or long press it to open the reminder page
+3. Download the calendar file (.ics) to add reminders to your calendar
+4. Alternatively, use the attached calendar file directly
 
 Best regards,
-Pet Reminder System"""
-        
-        # Convert reminder card image to base64
-        reminder_card_b64 = base64.b64encode(reminder_image_bytes).decode()
-        
-        # Create HTML version with embedded image
-        html_body = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
-.container {{ max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }}
-.header {{ text-align: center; color: #08312a; margin-bottom: 20px; }}
-.reminder-card {{ text-align: center; margin: 20px 0; }}
-.reminder-card img {{ max-width: 100%; height: auto; border: 2px solid #00e47c; border-radius: 10px; }}
-.details {{ background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; }}
-.footer {{ text-align: center; color: #666; margin-top: 30px; font-size: 14px; }}
-</style>
-</head>
-<body>
-<div class="container">
-<div class="header">
-<h2>🐾 Pet Reminder Card - {pet_name}</h2>
-<p>Your personalized medication reminder for <strong>{product_name}</strong></p>
-</div>
-<div class="reminder-card">
-<h3>Your Reminder Card</h3>
-<img src="data:image/png;base64,{reminder_card_b64}" alt="Pet Reminder Card">
-<p><em>Save this image to your phone or print it for easy reference!</em></p>
-</div>
-<div class="details">
-<h3>📋 Reminder Details</h3>
-<p><strong>Pet:</strong> {pet_name}</p>
-<p><strong>Product:</strong> {product_name}</p>
-<p><strong>Duration:</strong> {reminder_details['duration']}</p>
-<p><strong>Total Reminders:</strong> {reminder_details['total_reminders']}</p>
-<p><strong>Times:</strong> {', '.join([f"{t['time']} ({t['label']})" for t in reminder_details['times']])}</p>
-</div>
-<div class="footer">
-<p>📎 <strong>Calendar file (.ics) is attached</strong> - Import it into your calendar app!</p>
-<p>Best regards,<br><strong>Pet Reminder System</strong></p>
-</div>
-</div>
-</body>
-</html>"""
-        
-        # Create email parts
-        text_part = MIMEText(plain_text, 'plain', 'utf-8')
-        html_part = MIMEText(html_body, 'html', 'utf-8')
-        
-        # Add parts to message
-        msg.attach(text_part)
-        msg.attach(html_part)
-        
-        # Attach calendar file only
-        calendar_attachment = MIMEText(calendar_data, 'calendar')
-        calendar_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_calendar.ics"')
-        msg.attach(calendar_attachment)
-        
-        # Send email
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-        text = msg.as_string()
-        server.sendmail(EMAIL_USER, recipient_email, text)
-        server.quit()
-        
-        return True, "Email sent successfully!"
-        
-    except Exception as e:
-        return False, f"Failed to send email: {str(e)}"child {{
-            border-bottom: none;
-        }}
-        
-        .instructions-list li::before {{
-            content: "✅";
-            margin-right: 10px;
-        }}
-        
-        .footer {{
-            background: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            border-top: 1px solid #dee2e6;
-        }}
-        
-        .footer-text {{
-            color: #6c757d;
-            font-size: 14px;
-            margin: 0;
-        }}
-        
-        .signature {{
-            color: #08312a;
-            font-weight: 600;
-            margin-top: 10px;
-        }}
-        
-        @media (max-width: 600px) {{
-            .email-container {{
-                margin: 10px;
-                border-radius: 10px;
-            }}
-            
-            .header, .content {{
-                padding: 20px;
-            }}
-            
-            .detail-grid {{
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }}
-            
-            .pet-name {{
-                font-size: 24px;
-            }}
-            
-            .medication {{
-                font-size: 16px;
-            }}
-        }}
-    </style>
-</head>
-<body>
-    <div class="email-container">
-        <div class="header">
-            <div class="logo-container">
-                {f'<img src="{logo_data_url}" alt="BI Logo" class="logo-img">' if logo_data_url else '<div class="logo-fallback">🐾</div>'}
-            </div>
-            <div class="pet-name">{pet_name.upper()}</div>
-            <div class="medication">({product_name})</div>
-        </div>
-        
-        <div class="content">
-            <div class="greeting">
-                <strong>Hello!</strong><br>
-                Please find attached the QR Reminder Card for your pet's medication schedule.
-            </div>
-            
-            <div class="details-section">
-                <div class="section-title">Reminder Details</div>
-                
-                <div class="detail-grid">
-                    <div class="detail-item">
-                        <div class="detail-label">Pet Name</div>
-                        <div class="detail-value">{pet_name}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Product</div>
-                        <div class="detail-value">{product_name}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Frequency</div>
-                        <div class="detail-value">{frequency_text}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Duration</div>
-                        <div class="detail-value">{reminder_details['duration']}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Start Date</div>
-                        <div class="detail-value">{reminder_details['start_date']}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">End Date</div>
-                        <div class="detail-value">{reminder_details['end_date']}</div>
-                    </div>
-                </div>
-                
-                <div class="detail-item" style="grid-column: 1 / -1;">
-                    <div class="detail-label">Total Reminders</div>
-                    <div class="detail-value">{reminder_details['total_reminders']} reminders</div>
-                </div>
-            </div>
-            
-            <div class="times-section">
-                <div class="times-title">Reminder Times</div>
-                <ul class="times-list">
-                    {times_html_list}
-                </ul>
-            </div>
-            
-            {f'''
-            <div class="notes-section">
-                <div class="notes-title">Additional Notes</div>
-                <div class="notes-text">{reminder_details['notes']}</div>
-            </div>
-            ''' if reminder_details.get('notes') and reminder_details['notes'].strip() else ''}
-            
-            <div class="instructions">
-                <div class="instructions-title">How to Use</div>
-                <ul class="instructions-list">
-                    <li>Save the QR Reminder Card image to your phone</li>
-                    <li>Scan the QR code or long press it to open the reminder page</li>
-                    <li>Download the calendar file (.ics) to add reminders to your calendar</li>
-                    <li>Import the calendar file into any calendar app (Google, Apple, Outlook)</li>
-                </ul>
-            </div>
-        </div>
-        
-        <div class="footer">
-            <p class="footer-text">
-                This email contains your personalized pet medication reminder card and calendar file.
-            </p>
-            <p class="signature">
-                Best regards,<br>
-                <strong>Pet Reminder System</strong>
-            </p>
-        </div>
-    </div>
-</body>
-</html>
+Pet Reminder System
         """
         
-        # Create email parts
-        part1 = MIMEText(plain_text, 'plain', 'utf-8')
-        part2 = MIMEText(html_body, 'html', 'utf-8')
-        
-        # Add both parts to the message
-        msg.attach(part1)
-        msg.attach(part2)
+        msg.attach(MIMEText(body, 'plain'))
         
         # Attach QR reminder card image
         img_attachment = MIMEImage(reminder_image_bytes)
