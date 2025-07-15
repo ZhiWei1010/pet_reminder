@@ -1811,7 +1811,7 @@ def main():
         # Use session state values as defaults to maintain form data
         pet_name = st.text_input(
             "Pet Name", 
-            placeholder="e.g., Max, Luna, Charlie",
+            placeholder="e.g., Daisy, Luna, Charlie",
             value=get_form_data('pet_name', ''),
             key="pet_name_input"
         )
