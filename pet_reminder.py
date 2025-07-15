@@ -102,8 +102,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
         
         # Create plain text version
-        plain_text = f"""
-🐾 Pet Reminder Card - {pet_name} ({product_name})
+        plain_text = f"""Pet Reminder Card - {pet_name} ({product_name})
 
 Hello!
 
@@ -132,14 +131,13 @@ How to use:
 3. Import the calendar file into your preferred calendar app
 
 Best regards,
-Pet Reminder System
-        """
+Pet Reminder System"""
         
         # Convert reminder card image to base64
         reminder_card_b64 = base64.b64encode(reminder_image_bytes).decode()
         
-        # Create simple HTML version - NO COMPLEX FORMATTING
-        html_body = f'''<!DOCTYPE html>
+        # Create HTML version with embedded image
+        html_body = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -178,7 +176,7 @@ body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
 </div>
 </div>
 </body>
-</html>'''
+</html>"""
         
         # Create email parts
         text_part = MIMEText(plain_text, 'plain', 'utf-8')
