@@ -491,9 +491,6 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                     <!-- Header -->
                     <div class="header">
                         <div class="header-content">
-                            #<div class="logo-section">
-                                #{f'<img src="cid:{logo_cid}" alt="BI Logo" class="logo-img" style="width: 60px; height: 60px; object-fit: contain; display: block;" />' if logo_image_bytes else ''}
-                            #</div>
                             <div class="title-section">
                                 <h1>🐾 Pet QR Reminder Card 🐾</h1>
                                 <p>Schedule for <strong>{pet_name} ({product_name})</strong></p>
