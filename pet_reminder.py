@@ -1181,6 +1181,40 @@ def main():
     with col2:
         st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         
+        # Add debug section at the top - separate from main flow
+        with st.expander("🔍 Debug Email Configuration"):
+            st.write("**Check if email is configured correctly:**")
+            try:
+                if "GMAIL_USER" in st.secrets:
+                    st.write(f"✅ GMAIL_USER: {st.secrets['GMAIL_USER']}")
+                else:
+                    st.write("❌ GMAIL_USER not found in secrets")
+                
+                if "GMAIL_PASSWORD" in st.secrets:
+                    st.write(f"✅ GMAIL_PASSWORD: {'*' * len(st.secrets['GMAIL_PASSWORD'])}")
+                else:
+                    st.write("❌ GMAIL_PASSWORD not found in secrets")
+                    
+                # Test connection button
+                if st.button("Test Gmail Connection", key="test_gmail_conn"):
+                    if "GMAIL_USER" in st.secrets and "GMAIL_PASSWORD" in st.secrets:
+                        gmail_user = st.secrets["GMAIL_USER"]
+                        gmail_password = st.secrets["GMAIL_PASSWORD"]
+                        
+                        try:
+                            server = smtplib.SMTP('smtp.gmail.com', 587)
+                            server.starttls()
+                            server.login(gmail_user, gmail_password)
+                            server.quit()
+                            st.success("✅ Gmail connection successful!")
+                        except Exception as e:
+                            st.error(f"❌ Gmail connection failed: {str(e)}")
+                    else:
+                        st.error("❌ Gmail credentials not configured")
+                        
+            except Exception as e:
+                st.error(f"❌ Error checking configuration: {str(e)}")
+        
         if generate_button:
             if pet_name and product_name and selected_times and end_date >= start_date:
                 with st.spinner("QR Reminder Card Generation in Progress...."):
@@ -1257,69 +1291,17 @@ def main():
                                         mime="text/calendar"
                                     )
                                 
-                                # Email feature with better error handling
+                                # Simplified Email feature
                                 with st.expander("📧 Send via Email"):
-                                    st.write("📤 Send the reminder card directly to an email:")
+                                    st.write("📤 Send the reminder card and calendar file via email:")
                                     
-                                    # Debug info
-                                    if st.checkbox("🔍 Show Debug Info", key="debug_email"):
-                                        st.write("**Debug Information:**")
-                                        try:
-                                            if "GMAIL_USER" in st.secrets:
-                                                st.write(f"✅ GMAIL_USER configured: {st.secrets['GMAIL_USER']}")
-                                            else:
-                                                st.write("❌ GMAIL_USER not found in secrets")
-                                            
-                                            if "GMAIL_PASSWORD" in st.secrets:
-                                                st.write(f"✅ GMAIL_PASSWORD configured: {'*' * len(st.secrets['GMAIL_PASSWORD'])}")
-                                            else:
-                                                st.write("❌ GMAIL_PASSWORD not found in secrets")
-                                        except Exception as debug_e:
-                                            st.write(f"❌ Error accessing secrets: {debug_e}")
+                                    recipient_email = st.text_input(
+                                        "📧 Email Address", 
+                                        placeholder="someone@example.com",
+                                        key="email_recipient"
+                                    )
                                     
-                                    recipient_email = st.text_input("📧 Email Address", placeholder="someone@example.com", key="recipient_email")
-                                    
-                                    col_send, col_test = st.columns([1, 1])
-                                    
-                                    with col_send:
-                                        send_email_clicked = st.button("📧 Send Email", key="send_email", type="primary")
-                                    
-                                    with col_test:
-                                        test_config_clicked = st.button("🧪 Test Config", key="test_config")
-                                    
-                                    # Test configuration
-                                    if test_config_clicked:
-                                        st.write("**Testing Email Configuration...**")
-                                        try:
-                                            if "GMAIL_USER" not in st.secrets:
-                                                st.error("❌ GMAIL_USER not found in secrets")
-                                            elif "GMAIL_PASSWORD" not in st.secrets:
-                                                st.error("❌ GMAIL_PASSWORD not found in secrets")
-                                            else:
-                                                gmail_user = st.secrets["GMAIL_USER"]
-                                                gmail_password = st.secrets["GMAIL_PASSWORD"]
-                                                
-                                                if not gmail_user:
-                                                    st.error("❌ GMAIL_USER is empty")
-                                                elif not gmail_password:
-                                                    st.error("❌ GMAIL_PASSWORD is empty")
-                                                else:
-                                                    st.success("✅ Gmail credentials found in secrets")
-                                                    
-                                                    # Test SMTP connection
-                                                    try:
-                                                        server = smtplib.SMTP('smtp.gmail.com', 587)
-                                                        server.starttls()
-                                                        server.login(gmail_user, gmail_password)
-                                                        server.quit()
-                                                        st.success("✅ Gmail authentication successful!")
-                                                    except Exception as smtp_e:
-                                                        st.error(f"❌ Gmail authentication failed: {str(smtp_e)}")
-                                        except Exception as e:
-                                            st.error(f"❌ Configuration error: {str(e)}")
-                                    
-                                    # Send email
-                                    if send_email_clicked:
+                                    if st.button("📧 Send Email", key="send_email_btn"):
                                         if not recipient_email:
                                             st.warning("⚠️ Please enter an email address")
                                         elif "@" not in recipient_email or "." not in recipient_email:
@@ -1341,11 +1323,15 @@ def main():
                                                     st.balloons()
                                                 else:
                                                     st.error(f"❌ {message}")
-                                                    st.error("**Troubleshooting Tips:**")
-                                                    st.write("1. Check if 2-Step Verification is enabled on Gmail")
-                                                    st.write("2. Verify you're using App Password (not regular password)")
-                                                    st.write("3. App Password should be 16 characters without spaces")
-                                                    st.write("4. Make sure GMAIL_USER and GMAIL_PASSWORD are set in Streamlit secrets")
+                                                    
+                                                    # Show troubleshooting tips
+                                                    with st.expander("🔧 Troubleshooting Tips"):
+                                                        st.write("**Common issues and solutions:**")
+                                                        st.write("1. **Gmail App Password**: Make sure you're using an App Password (not regular password)")
+                                                        st.write("2. **2-Step Verification**: Must be enabled on your Gmail account")
+                                                        st.write("3. **Password Format**: 16 characters without spaces (e.g., 'abcdefghijklmnop')")
+                                                        st.write("4. **Secrets Configuration**: Check if GMAIL_USER and GMAIL_PASSWORD are set in Streamlit secrets")
+                                                        st.write("5. **Gmail Security**: Check if Gmail blocked the sign-in attempt")
                                 
                                 with st.expander("🔗 URLs"):
                                     st.write(f"**QR Web Page URL:** {web_page_url}")
