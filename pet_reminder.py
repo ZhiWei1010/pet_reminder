@@ -117,7 +117,6 @@ def generate_qr_svg(web_page_url):
     return svg_string
 
 def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
-    """Send email with Gmail mobile optimized template"""
     try:
         if not EMAIL_USER or not EMAIL_PASSWORD:
             return False, "Email configuration not set. Please configure SMTP settings."
@@ -793,7 +792,7 @@ def get_next_sequence_number():
         st.session_state.pet_counter += 1
     
     return next_count
-	
+
 def generate_meaningful_id(pet_name, product_name):
     """Generate meaningful ID with sequence number"""
     # Get next sequence number from S3 (persistent)
@@ -809,7 +808,6 @@ def generate_meaningful_id(pet_name, product_name):
     return meaningful_id
 
 def create_calendar_reminder(pet_name, product_name, frequency, frequency_value, reminder_times, start_date, end_date, notes=""):
-    """Create ICS calendar content for recurring reminder with multiple times per day"""
     
     # Calculate reminder count for RRULE
     reminder_count = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
@@ -856,13 +854,11 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
             rrule['freq'] = 'daily'
             rrule['interval'] = int(frequency_value)
         
-        # Always add count limit based on date range
         if reminder_count > 0:
             rrule['count'] = reminder_count
         
         event.add('rrule', rrule)
         
-        # Add alarm (reminder notification)
         alarm = Alarm()
         alarm.add('action', 'DISPLAY')
         alarm.add('description', f'Time to give {product_name} to {pet_name}! ({time_label})')
@@ -1574,7 +1570,6 @@ def generate_content(pet_name, product_name, start_date, end_date, frequency, fr
         return False
 
 def display_generated_content():
-    """Display the generated content from session state"""
     if not st.session_state.content_generated or not st.session_state.generated_content:
         return
     
@@ -1609,7 +1604,6 @@ def display_generated_content():
             key="download_calendar"
         )
     
-    # NEW EMAIL SECTION
     with st.expander("📧 Email Reminder Card"):
         if not EMAIL_USER or not EMAIL_PASSWORD:
             st.warning("⚠️ Email configuration not set. Please configure SMTP settings in environment variables.")
@@ -2091,8 +2085,9 @@ def main():
             st.session_state.generated_content = None
             st.session_state.content_generated = False
             st.rerun()
+    
     with col2:
-	st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
+        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         # Display generated content if available
         if st.session_state.content_generated and st.session_state.generated_content:
             display_generated_content()    
