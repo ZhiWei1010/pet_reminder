@@ -12,15 +12,6 @@ import hashlib
 import boto3
 import math
 
-# Email imports
-import smtplib
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.image import MIMEImage
-from email.mime.base import MIMEBase
-from email import encoders
-
 # Configure page with mobile optimization
 st.set_page_config(
     page_title="Pet Reminder",
@@ -28,101 +19,21 @@ st.set_page_config(
     layout="wide"
 )
 
-# AWS Configuration from Streamlit secrets
-AWS_REGION = st.secrets["AWS_REGION"]
-S3_BUCKET = st.secrets["S3_BUCKET_NAME"]
+# AWS Configuration
+AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')
 
-# Initialize AWS client with credentials from Streamlit secrets
+# Initialize AWS client with credentials from environment variables
 s3_client = boto3.client(
     's3',
     region_name=AWS_REGION,
-    aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-    aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"]
+    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
 )
 
 # Global counter for generating sequential IDs
 if 'pet_counter' not in st.session_state:
     st.session_state.pet_counter = 1
-
-def send_simple_email(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, meaningful_id):
-    """Simple email function using Gmail with Streamlit secrets"""
-    try:
-        # Debug: Check if secrets exist
-        if "GMAIL_USER" not in st.secrets:
-            return False, "GMAIL_USER not found in secrets"
-        if "GMAIL_PASSWORD" not in st.secrets:
-            return False, "GMAIL_PASSWORD not found in secrets"
-        
-        # Get Gmail credentials from Streamlit secrets
-        gmail_user = st.secrets["GMAIL_USER"]
-        gmail_password = st.secrets["GMAIL_PASSWORD"]
-        
-        # Debug: Check if credentials are not empty
-        if not gmail_user or not gmail_password:
-            return False, "Gmail credentials are empty"
-        
-        # Validate email format
-        if "@" not in recipient_email or "." not in recipient_email:
-            return False, "Invalid recipient email format"
-        
-        # Create email
-        msg = MIMEMultipart()
-        msg['From'] = gmail_user
-        msg['To'] = recipient_email
-        msg['Subject'] = f"🐾 {pet_name} - {product_name} Medication Reminder"
-        
-        # Simple email body
-        body = f"""
-Hi!
-
-Your pet medication reminder for {pet_name} is attached.
-
-Pet: {pet_name}
-Medication: {product_name}
-
-Instructions:
-1. Print or save the attached reminder card
-2. Scan the QR code with your phone
-3. Add the calendar file to your phone's calendar
-
-Best regards,
-Pet Reminder System 🐾
-        """
-        
-        msg.attach(MIMEText(body, 'plain'))
-        
-        # Attach reminder card image
-        img_attachment = MIMEImage(reminder_image_bytes)
-        img_attachment.add_header('Content-Disposition', f'attachment; filename="{meaningful_id}_reminder.png"')
-        msg.attach(img_attachment)
-        
-        # Attach calendar file
-        cal_attachment = MIMEBase('text', 'calendar')
-        cal_attachment.set_payload(calendar_data.encode('utf-8'))
-        encoders.encode_base64(cal_attachment)
-        cal_attachment.add_header('Content-Disposition', f'attachment; filename="{meaningful_id}.ics"')
-        msg.attach(cal_attachment)
-        
-        # Send email with detailed error handling
-        try:
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(gmail_user, gmail_password)
-            text = msg.as_string()
-            server.sendmail(gmail_user, recipient_email, text)
-            server.quit()
-            return True, "Email sent successfully!"
-        except smtplib.SMTPAuthenticationError:
-            return False, "Gmail authentication failed. Check your email and app password."
-        except smtplib.SMTPException as smtp_e:
-            return False, f"SMTP error: {str(smtp_e)}"
-        except Exception as send_e:
-            return False, f"Error sending email: {str(send_e)}"
-        
-    except KeyError as e:
-        return False, f"Gmail credentials not configured in secrets: {str(e)}"
-    except Exception as e:
-        return False, f"Unexpected error: {str(e)}"
 
 def calculate_reminder_count(start_date, end_date, frequency, frequency_value=None):
     """Calculate total number of reminders based on date range and frequency"""
@@ -1181,40 +1092,6 @@ def main():
     with col2:
         st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         
-        # Add debug section at the top - separate from main flow
-        with st.expander("🔍 Debug Email Configuration"):
-            st.write("**Check if email is configured correctly:**")
-            try:
-                if "GMAIL_USER" in st.secrets:
-                    st.write(f"✅ GMAIL_USER: {st.secrets['GMAIL_USER']}")
-                else:
-                    st.write("❌ GMAIL_USER not found in secrets")
-                
-                if "GMAIL_PASSWORD" in st.secrets:
-                    st.write(f"✅ GMAIL_PASSWORD: {'*' * len(st.secrets['GMAIL_PASSWORD'])}")
-                else:
-                    st.write("❌ GMAIL_PASSWORD not found in secrets")
-                    
-                # Test connection button
-                if st.button("Test Gmail Connection", key="test_gmail_conn"):
-                    if "GMAIL_USER" in st.secrets and "GMAIL_PASSWORD" in st.secrets:
-                        gmail_user = st.secrets["GMAIL_USER"]
-                        gmail_password = st.secrets["GMAIL_PASSWORD"]
-                        
-                        try:
-                            server = smtplib.SMTP('smtp.gmail.com', 587)
-                            server.starttls()
-                            server.login(gmail_user, gmail_password)
-                            server.quit()
-                            st.success("✅ Gmail connection successful!")
-                        except Exception as e:
-                            st.error(f"❌ Gmail connection failed: {str(e)}")
-                    else:
-                        st.error("❌ Gmail credentials not configured")
-                        
-            except Exception as e:
-                st.error(f"❌ Error checking configuration: {str(e)}")
-        
         if generate_button:
             if pet_name and product_name and selected_times and end_date >= start_date:
                 with st.spinner("QR Reminder Card Generation in Progress...."):
@@ -1290,48 +1167,6 @@ def main():
                                         file_name=f"{meaningful_id}.ics",
                                         mime="text/calendar"
                                     )
-                                
-                                # Simplified Email feature
-                                with st.expander("📧 Send via Email"):
-                                    st.write("📤 Send the reminder card and calendar file via email:")
-                                    
-                                    recipient_email = st.text_input(
-                                        "📧 Email Address", 
-                                        placeholder="someone@example.com",
-                                        key="email_recipient"
-                                    )
-                                    
-                                    if st.button("📧 Send Email", key="send_email_btn"):
-                                        if not recipient_email:
-                                            st.warning("⚠️ Please enter an email address")
-                                        elif "@" not in recipient_email or "." not in recipient_email:
-                                            st.warning("⚠️ Please enter a valid email address")
-                                        else:
-                                            with st.spinner("Sending email..."):
-                                                success, message = send_simple_email(
-                                                    recipient_email, 
-                                                    pet_name, 
-                                                    product_name, 
-                                                    reminder_image_bytes, 
-                                                    calendar_data, 
-                                                    meaningful_id
-                                                )
-                                                
-                                                if success:
-                                                    st.success(f"✅ {message}")
-                                                    st.success(f"📧 Email sent to: {recipient_email}")
-                                                    st.balloons()
-                                                else:
-                                                    st.error(f"❌ {message}")
-                                                    
-                                                    # Show troubleshooting tips
-                                                    with st.expander("🔧 Troubleshooting Tips"):
-                                                        st.write("**Common issues and solutions:**")
-                                                        st.write("1. **Gmail App Password**: Make sure you're using an App Password (not regular password)")
-                                                        st.write("2. **2-Step Verification**: Must be enabled on your Gmail account")
-                                                        st.write("3. **Password Format**: 16 characters without spaces (e.g., 'abcdefghijklmnop')")
-                                                        st.write("4. **Secrets Configuration**: Check if GMAIL_USER and GMAIL_PASSWORD are set in Streamlit secrets")
-                                                        st.write("5. **Gmail Security**: Check if Gmail blocked the sign-in attempt")
                                 
                                 with st.expander("🔗 URLs"):
                                     st.write(f"**QR Web Page URL:** {web_page_url}")
