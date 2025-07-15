@@ -90,18 +90,22 @@ def validate_email(email):
     return re.match(pattern, email) is not None
 
 def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
-    """Send email with QR reminder card embedded in body and calendar file as attachment"""
+    """Send email with QR code embedded in body for scanning and full reminder card as attachment"""
     try:
         if not EMAIL_USER or not EMAIL_PASSWORD:
             return False, "Email configuration not set. Please configure SMTP settings."
         
+        # We need to generate JUST the QR code for embedding in email body
+        # First, let's extract or regenerate the QR code from the session state
+        qr_image_bytes = st.session_state.generated_content.get('qr_image_bytes') if st.session_state.generated_content else None
+        
         # Create message
-        msg = MIMEMultipart('related')  # Changed to 'related' for embedded images
+        msg = MIMEMultipart('related')  # 'related' for embedded images
         msg['From'] = EMAIL_USER
         msg['To'] = recipient_email
         msg['Subject'] = f"🐾 Pet Reminder Card - {pet_name} ({product_name})"
         
-        # Create the HTML email body with embedded image
+        # Create the HTML email body with embedded QR code
         html_body = f"""
 <!DOCTYPE html>
 <html>
@@ -140,19 +144,32 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             margin: 10px 0 0 0;
             font-size: 16px;
         }}
-        .reminder-card {{
+        .qr-section {{
             text-align: center;
             margin: 30px 0;
-            padding: 20px;
+            padding: 25px;
             background: linear-gradient(135deg, #f8f9fa, #e9ecef);
             border-radius: 15px;
             border: 2px solid #00e47c;
         }}
-        .reminder-card img {{
-            max-width: 100%;
+        .qr-section h2 {{
+            color: #08312a;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }}
+        .qr-section img {{
+            max-width: 250px;
             height: auto;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            background: white;
+            padding: 15px;
+        }}
+        .qr-instructions {{
+            margin-top: 15px;
+            font-size: 16px;
+            color: #08312a;
+            font-weight: 600;
         }}
         .details-section {{
             background: #f8f9fa;
@@ -165,8 +182,6 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             font-size: 20px;
             font-weight: bold;
             margin-bottom: 15px;
-            display: flex;
-            align-items: center;
         }}
         .detail-item {{
             margin: 8px 0;
@@ -214,6 +229,17 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             color: #856404;
             line-height: 1.5;
         }}
+        .attachment-note {{
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }}
+        .attachment-note strong {{
+            color: #0c5460;
+        }}
         .instructions {{
             background: #e3f2fd;
             border-radius: 10px;
@@ -247,17 +273,6 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             color: #666;
             font-size: 14px;
         }}
-        .cta-note {{
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: center;
-        }}
-        .cta-note strong {{
-            color: #155724;
-        }}
         @media (max-width: 600px) {{
             body {{
                 padding: 10px;
@@ -267,6 +282,9 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             }}
             .header h1 {{
                 font-size: 24px;
+            }}
+            .qr-section img {{
+                max-width: 200px;
             }}
             .detail-item {{
                 flex-direction: column;
@@ -285,8 +303,12 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             <p>Medication schedule for <strong>{pet_name}</strong></p>
         </div>
         
-        <div class="reminder-card">
-            <img src="cid:reminder_card" alt="Pet Reminder Card" />
+        <div class="qr-section">
+            <h2>📱 Scan QR Code</h2>
+            <img src="cid:qr_code" alt="QR Code for Pet Reminder" />
+            <div class="qr-instructions">
+                👆 Long press or scan with your phone camera
+            </div>
         </div>
         
         <div class="details-section">
@@ -334,17 +356,18 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             ''' if reminder_details.get('notes') and reminder_details['notes'].strip() else ''}
         </div>
         
-        <div class="cta-note">
-            <strong>📱 How to use the QR Code:</strong><br>
-            Scan the QR code in the reminder card above with your phone camera or QR scanner app
+        <div class="attachment-note">
+            <strong>📎 Attachments Included:</strong><br>
+            • Full Reminder Card (PNG image) - Save to your device<br>
+            • Calendar File (.ics) - Add reminders to your calendar
         </div>
         
         <div class="instructions">
-            <div class="instructions-title">📅 Adding to Your Calendar</div>
-            <div class="instruction-step">Open the attached calendar file (.ics) on your device</div>
-            <div class="instruction-step">Your calendar app will automatically open</div>
-            <div class="instruction-step">Confirm to add all reminder events</div>
-            <div class="instruction-step">Set notification preferences as needed</div>
+            <div class="instructions-title">📅 How to Use</div>
+            <div class="instruction-step">Scan the QR code above to access the reminder page</div>
+            <div class="instruction-step">Download the attached reminder card image</div>
+            <div class="instruction-step">Open the attached calendar file (.ics) to add reminders</div>
+            <div class="instruction-step">Set notification preferences in your calendar app</div>
         </div>
         
         <div class="footer">
@@ -379,9 +402,13 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         
         text_body += """
 📱 How to use:
-1. View the reminder card image in this email
-2. Scan the QR code with your phone camera
+1. Check the attachments for the full reminder card and calendar file
+2. Scan the QR code (if viewing HTML email) with your phone camera
 3. Download the attached calendar file (.ics) to add reminders to your calendar
+
+📎 Attachments:
+• Full Reminder Card (PNG image)
+• Calendar File (.ics)
 
 Best regards,
 Pet Reminder System
@@ -400,13 +427,19 @@ Pet Reminder System
         # Attach the alternative part to main message
         msg.attach(msg_alternative)
         
-        # Embed the reminder card image
-        img_attachment = MIMEImage(reminder_image_bytes)
-        img_attachment.add_header('Content-ID', '<reminder_card>')
-        img_attachment.add_header('Content-Disposition', 'inline', filename=f"{pet_name}_{product_name}_reminder_card.png")
-        msg.attach(img_attachment)
+        # Embed the QR code for scanning in email body
+        if qr_image_bytes:
+            qr_attachment = MIMEImage(qr_image_bytes)
+            qr_attachment.add_header('Content-ID', '<qr_code>')
+            qr_attachment.add_header('Content-Disposition', 'inline', filename=f"{pet_name}_{product_name}_qr.png")
+            msg.attach(qr_attachment)
         
-        # Attach calendar file only (not the image)
+        # Attach the full reminder card image as attachment
+        reminder_card_attachment = MIMEImage(reminder_image_bytes)
+        reminder_card_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_reminder_card.png"')
+        msg.attach(reminder_card_attachment)
+        
+        # Attach calendar file
         calendar_attachment = MIMEText(calendar_data, 'calendar')
         calendar_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_calendar.ics"')
         msg.attach(calendar_attachment)
