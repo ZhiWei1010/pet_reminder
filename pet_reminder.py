@@ -2095,13 +2095,9 @@ def main():
 	st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         # Display generated content if available
         if st.session_state.content_generated and st.session_state.generated_content:
-            display_generated_content()
-	    
+            display_generated_content()    
         else:
             st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
-
-			
-
-
+	    
 if __name__ == "__main__":
     main()
