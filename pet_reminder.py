@@ -31,9 +31,40 @@ s3_client = boto3.client(
     aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
 )
 
-# Global counter for generating sequential IDs
-if 'pet_counter' not in st.session_state:
-    st.session_state.pet_counter = 1
+# Initialize session state for persistence
+def init_session_state():
+    """Initialize all session state variables"""
+    if 'pet_counter' not in st.session_state:
+        st.session_state.pet_counter = 1
+    
+    # Form data persistence
+    if 'form_data' not in st.session_state:
+        st.session_state.form_data = {}
+    
+    # Generated content persistence
+    if 'generated_content' not in st.session_state:
+        st.session_state.generated_content = None
+    
+    # Generation status
+    if 'content_generated' not in st.session_state:
+        st.session_state.content_generated = False
+
+def save_form_data(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes):
+    """Save current form data to session state"""
+    st.session_state.form_data = {
+        'pet_name': pet_name,
+        'product_name': product_name,
+        'start_date': start_date,
+        'end_date': end_date,
+        'frequency': frequency,
+        'frequency_value': frequency_value,
+        'selected_times': selected_times,
+        'notes': notes
+    }
+
+def get_form_data(key, default=None):
+    """Get form data from session state"""
+    return st.session_state.form_data.get(key, default)
 
 def calculate_reminder_count(start_date, end_date, frequency, frequency_value=None):
     """Calculate total number of reminders based on date range and frequency"""
@@ -832,7 +863,147 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     return img
 
+def generate_content(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes):
+    """Generate all content and save to session state"""
+    try:
+        # Calculate reminder count
+        total_reminders = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
+        duration_text = format_duration_text(start_date, end_date, total_reminders, frequency)
+        
+        calendar_data = create_calendar_reminder(
+            pet_name=pet_name,
+            product_name=product_name,
+            frequency=frequency,
+            frequency_value=frequency_value,
+            reminder_times=selected_times,
+            start_date=start_date,
+            end_date=end_date,
+            notes=notes
+        )
+        
+        meaningful_id = generate_meaningful_id(pet_name, product_name)
+        calendar_url = upload_to_s3(calendar_data, meaningful_id)
+        
+        if calendar_url:
+            reminder_details = {
+                'frequency': frequency,
+                'frequency_value': frequency_value,
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date.strftime('%Y-%m-%d'),
+                'duration': duration_text,
+                'total_reminders': total_reminders,
+                'times': selected_times,
+                'notes': notes
+            }
+            
+            html_content = create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
+            web_page_url = upload_web_page_to_s3(html_content, meaningful_id)
+            
+            if web_page_url:
+                qr_image_bytes = generate_qr_code(web_page_url)
+                
+                # Generate the combined reminder image
+                reminder_image = create_reminder_image(pet_name, product_name, reminder_details, qr_image_bytes)
+                
+                # Convert PIL image to bytes for download
+                img_buffer = io.BytesIO()
+                reminder_image.save(img_buffer, format='PNG', quality=95, dpi=(300, 300))
+                reminder_image_bytes = img_buffer.getvalue()
+                
+                # Upload reminder image to S3
+                reminder_image_url = upload_reminder_image_to_s3(reminder_image_bytes, meaningful_id)
+                
+                # Save everything to session state
+                st.session_state.generated_content = {
+                    'meaningful_id': meaningful_id,
+                    'reminder_image_bytes': reminder_image_bytes,
+                    'qr_image_bytes': qr_image_bytes,
+                    'calendar_data': calendar_data,
+                    'web_page_url': web_page_url,
+                    'calendar_url': calendar_url,
+                    'reminder_image_url': reminder_image_url,
+                    'reminder_details': reminder_details,
+                    'pet_name': pet_name,
+                    'product_name': product_name
+                }
+                st.session_state.content_generated = True
+                return True
+            else:
+                st.error("❌ Failed to create web page - check S3 permissions")
+                return False
+        else:
+            st.error("❌ Failed to upload calendar file - check S3 configuration")
+            return False
+        
+    except Exception as e:
+        st.error(f"Error generating content: {str(e)}")
+        return False
+
+def display_generated_content():
+    """Display the generated content from session state"""
+    if not st.session_state.content_generated or not st.session_state.generated_content:
+        return
+    
+    content = st.session_state.generated_content
+    
+    # Display reminder card
+    st.image(content['reminder_image_bytes'], use_container_width=True)
+    
+    with st.expander("📥 Download Options"):
+        # Download reminder Card with QR code
+        st.download_button(
+            label="🖼️ Download Reminder Card (with QR Code)",
+            data=content['reminder_image_bytes'],
+            file_name=f"{content['meaningful_id']}_reminder_image.png",
+            mime="image/png",
+            key="download_reminder_card"
+        )
+        
+        st.download_button(
+            label="📥 Download QR Code Only",
+            data=content['qr_image_bytes'],
+            file_name=f"{content['meaningful_id']}_qr.png",
+            mime="image/png",
+            key="download_qr_only"
+        )
+        
+        st.download_button(
+            label="📅 Download Calendar File", 
+            data=content['calendar_data'],
+            file_name=f"{content['meaningful_id']}.ics",
+            mime="text/calendar",
+            key="download_calendar"
+        )
+    
+    with st.expander("🔗 URLs"):
+        st.write(f"**QR Web Page URL:** {content['web_page_url']}")
+        st.write(f"**Calendar File URL:** {content['calendar_url']}")
+        if content['reminder_image_url']:
+            st.write(f"**Reminder Card URL:** {content['reminder_image_url']}")
+        else:
+            st.write("**Reminder Card URL:** ❌ Upload failed")
+            
+    with st.expander("📋 Reminder Summary"):
+        details = content['reminder_details']
+        st.write(f"**Pet:** {content['pet_name']}")
+        st.write(f"**Product:** {content['product_name']}")
+        st.write(f"**Start Date:** {details['start_date']}")
+        st.write(f"**End Date:** {details['end_date']}")
+        st.write(f"**Frequency:** {details['frequency']}")
+        if details.get('frequency_value'):
+            st.write(f"**Every:** {details['frequency_value']} days")
+        st.write(f"**Duration:** {details['duration']}")
+        st.write(f"**Total Reminders:** {details['total_reminders']}")
+        st.write(f"**Times per day:** {len(details['times'])}")
+        for time_info in details['times']:
+            st.write(f"  • {time_info['time']} - {time_info['label']}")
+        if details.get('notes'):
+            st.write(f"**Notes:** {details['notes']}")
+
 def main():
+    # Initialize session state
+    init_session_state()
+    
     # Add mobile-responsive CSS
     st.markdown("""
     <style>
@@ -902,7 +1073,13 @@ def main():
     with col1:
         st.markdown("<h6 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h6>", unsafe_allow_html=True)
         
-        pet_name = st.text_input("Pet Name", placeholder="e.g., Max, Luna, Charlie")
+        # Use session state values as defaults to maintain form data
+        pet_name = st.text_input(
+            "Pet Name", 
+            placeholder="e.g., Max, Luna, Charlie",
+            value=get_form_data('pet_name', ''),
+            key="pet_name_input"
+        )
         
         products = [
             "Broadline",
@@ -911,23 +1088,38 @@ def main():
             "Metacam", 
             "NexGard",
             "NexGard SPECTRA",
-	    "NexGard COMBO",
-     	    "Prascend",
-	    "Previcox",
-     	    "ProZinc",
-	    "PUREVAX",
-     	    "Rabisin / Imrab",
-	    "Rabisin / Raboral V-RG",
-     	    "Semintra",
-	    "SENVELGO",
+            "NexGard COMBO",
+            "Prascend",
+            "Previcox",
+            "ProZinc",
+            "PUREVAX",
+            "Rabisin / Imrab",
+            "Rabisin / Raboral V-RG",
+            "Semintra",
+            "SENVELGO",
             "Vetmedin",	    
-	    "Other"
+            "Other"
         ]
         
-        product_name = st.selectbox("BI Pet Product", products)
+        saved_product = get_form_data('product_name', products[0])
+        product_index = 0
+        if saved_product in products:
+            product_index = products.index(saved_product)
+        
+        product_name = st.selectbox(
+            "BI Pet Product", 
+            products, 
+            index=product_index,
+            key="product_select"
+        )
         
         if product_name == "Other":
-            product_name = st.text_input("Custom Product Name", placeholder="Enter product name")
+            product_name = st.text_input(
+                "Custom Product Name", 
+                placeholder="Enter product name",
+                value=get_form_data('custom_product', ''),
+                key="custom_product_input"
+            )
         
         # Date Range Selection
         st.markdown("**📅 Reminder Period**")
@@ -936,9 +1128,10 @@ def main():
         with col_start:
             start_date = st.date_input(
                 "Start Date",
-                value=date.today(),
+                value=get_form_data('start_date', date.today()),
                 min_value=date.today(),
-                help="First day of reminders"
+                help="First day of reminders",
+                key="start_date_input"
             )
         
         with col_end:
@@ -948,20 +1141,38 @@ def main():
             
             end_date = st.date_input(
                 "End Date",
-                value=default_end_date,
+                value=get_form_data('end_date', default_end_date),
                 min_value=date.today(),
-                help="Last day of reminders"
+                help="Last day of reminders",
+                key="end_date_input"
             )
         
         # Validate date range
         if end_date < start_date:
             st.error("⚠️ End date must be on or after start date")
         
-        frequency = st.selectbox("Reminder Frequency", ["Daily", "Weekly", "Monthly", "Custom Days"], index=0)
+        frequency_options = ["Daily", "Weekly", "Monthly", "Custom Days"]
+        saved_frequency = get_form_data('frequency', 'Daily')
+        frequency_index = 0
+        if saved_frequency in frequency_options:
+            frequency_index = frequency_options.index(saved_frequency)
+        
+        frequency = st.selectbox(
+            "Reminder Frequency", 
+            frequency_options, 
+            index=frequency_index,
+            key="frequency_select"
+        )
         
         frequency_value = None
         if frequency == "Custom Days":
-            frequency_value = st.number_input("Every X days", min_value=1, max_value=365, value=7)
+            frequency_value = st.number_input(
+                "Every X days", 
+                min_value=1, 
+                max_value=365, 
+                value=get_form_data('frequency_value', 7),
+                key="frequency_value_input"
+            )
         
         # Calculate and show reminder count
         if start_date and end_date and end_date >= start_date:
@@ -1005,15 +1216,22 @@ def main():
             }
         }
         
+        # Get saved selected times or use empty list
+        saved_times = get_form_data('selected_times', [])
+        saved_time_periods = [t['label'] for t in saved_times] if saved_times else []
+        
         # Let user select which times they want
         selected_times = []
         
         col_time1, col_time2 = st.columns(2)
         
         with col_time1:
-            if st.checkbox("🌅 Morning", key="morning"):
+            morning_checked = "Morning" in saved_time_periods
+            if st.checkbox("🌅 Morning", key="morning", value=morning_checked):
                 morning_options = time_periods["Morning"]["options"]
-                default_idx = morning_options.index(time_periods["Morning"]["default"]) if time_periods["Morning"]["default"] in morning_options else 0
+                # Find saved time or use default
+                saved_morning_time = next((t['time'] for t in saved_times if t['label'] == 'Morning'), time_periods["Morning"]["default"])
+                default_idx = morning_options.index(saved_morning_time) if saved_morning_time in morning_options else 0
                 morning_time = st.selectbox(
                     "Morning time", 
                     options=morning_options,
@@ -1022,9 +1240,11 @@ def main():
                 )
                 selected_times.append({"time": morning_time, "label": "Morning"})
                 
-            if st.checkbox("☀️ Afternoon", key="afternoon"):
+            afternoon_checked = "Afternoon" in saved_time_periods
+            if st.checkbox("☀️ Afternoon", key="afternoon", value=afternoon_checked):
                 afternoon_options = time_periods["Afternoon"]["options"]
-                default_idx = afternoon_options.index(time_periods["Afternoon"]["default"]) if time_periods["Afternoon"]["default"] in afternoon_options else 0
+                saved_afternoon_time = next((t['time'] for t in saved_times if t['label'] == 'Afternoon'), time_periods["Afternoon"]["default"])
+                default_idx = afternoon_options.index(saved_afternoon_time) if saved_afternoon_time in afternoon_options else 0
                 afternoon_time = st.selectbox(
                     "Afternoon time", 
                     options=afternoon_options,
@@ -1034,9 +1254,11 @@ def main():
                 selected_times.append({"time": afternoon_time, "label": "Afternoon"})
         
         with col_time2:
-            if st.checkbox("🌇 Evening", key="evening"):
+            evening_checked = "Evening" in saved_time_periods
+            if st.checkbox("🌇 Evening", key="evening", value=evening_checked):
                 evening_options = time_periods["Evening"]["options"]
-                default_idx = evening_options.index(time_periods["Evening"]["default"]) if time_periods["Evening"]["default"] in evening_options else 0
+                saved_evening_time = next((t['time'] for t in saved_times if t['label'] == 'Evening'), time_periods["Evening"]["default"])
+                default_idx = evening_options.index(saved_evening_time) if saved_evening_time in evening_options else 0
                 evening_time = st.selectbox(
                     "Evening time", 
                     options=evening_options,
@@ -1045,9 +1267,11 @@ def main():
                 )
                 selected_times.append({"time": evening_time, "label": "Evening"})
                 
-            if st.checkbox("🌙 Night", key="night"):
+            night_checked = "Night" in saved_time_periods
+            if st.checkbox("🌙 Night", key="night", value=night_checked):
                 night_options = time_periods["Night"]["options"]
-                default_idx = night_options.index(time_periods["Night"]["default"]) if time_periods["Night"]["default"] in night_options else 0
+                saved_night_time = next((t['time'] for t in saved_times if t['label'] == 'Night'), time_periods["Night"]["default"])
+                default_idx = night_options.index(saved_night_time) if saved_night_time in night_options else 0
                 night_time = st.selectbox(
                     "Night time", 
                     options=night_options,
@@ -1057,9 +1281,24 @@ def main():
                 selected_times.append({"time": night_time, "label": "Night"})
         
         # Option for custom time with validation
-        if st.checkbox("🕐 Custom Time", key="custom"):
-            custom_time = st.time_input("Custom time", value=datetime.strptime("12:00", "%H:%M").time(), key="custom_time")
-            custom_label = st.text_input("Custom label", placeholder="e.g., Lunch, Bedtime", key="custom_label")
+        custom_times = [t for t in saved_times if t['label'] not in ['Morning', 'Afternoon', 'Evening', 'Night']]
+        custom_checked = len(custom_times) > 0
+        
+        if st.checkbox("🕐 Custom Time", key="custom", value=custom_checked):
+            saved_custom_time = custom_times[0]['time'] if custom_times else "12:00"
+            saved_custom_label = custom_times[0]['label'] if custom_times else ""
+            
+            custom_time = st.time_input(
+                "Custom time", 
+                value=datetime.strptime(saved_custom_time, "%H:%M").time(), 
+                key="custom_time"
+            )
+            custom_label = st.text_input(
+                "Custom label", 
+                placeholder="e.g., Lunch, Bedtime", 
+                value=saved_custom_label,
+                key="custom_label"
+            )
             
             if custom_label:
                 # Check if custom time overlaps with selected periods
@@ -1080,131 +1319,50 @@ def main():
                 
                 selected_times.append({"time": custom_time.strftime("%H:%M"), "label": custom_label})
         
-        notes = st.text_area("Additional Notes (Optional)", placeholder="e.g., Give with food, Check for side effects")
+        notes = st.text_area(
+            "Additional Notes (Optional)", 
+            placeholder="e.g., Give with food, Check for side effects",
+            value=get_form_data('notes', ''),
+            key="notes_input"
+        )
         
         # Show selected times summary
         if selected_times:
             times_summary = ', '.join([f"{t['time']} ({t['label']})" for t in selected_times])
             st.info(f"📅 Selected times: {times_summary}")
         
-        generate_button = st.button("🔄 Generate QR Reminder Card", type="primary")
-    
-    with col2:
-        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
-        
-        if generate_button:
+        # Save form data and generate button
+        if st.button("🔄 Generate QR Reminder Card", type="primary", key="generate_btn"):
             if pet_name and product_name and selected_times and end_date >= start_date:
+                # Save form data to session state
+                save_form_data(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes)
+                
                 with st.spinner("QR Reminder Card Generation in Progress...."):
-                    try:
-                        # Calculate reminder count
-                        total_reminders = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
-                        duration_text = format_duration_text(start_date, end_date, total_reminders, frequency)
-                        
-                        calendar_data = create_calendar_reminder(
-                            pet_name=pet_name,
-                            product_name=product_name,
-                            frequency=frequency,
-                            frequency_value=frequency_value,
-                            reminder_times=selected_times,
-                            start_date=start_date,
-                            end_date=end_date,
-                            notes=notes
-                        )
-                        
-                        meaningful_id = generate_meaningful_id(pet_name, product_name)
-                        calendar_url = upload_to_s3(calendar_data, meaningful_id)
-                        
-                        if calendar_url:
-                            reminder_details = {
-                                'frequency': frequency,
-                                'start_date': start_date.strftime('%Y-%m-%d'),
-                                'end_date': end_date.strftime('%Y-%m-%d'),
-                                'duration': duration_text,
-                                'total_reminders': total_reminders,
-                                'times': selected_times,
-                                'notes': notes
-                            }
-                            
-                            html_content = create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
-                            web_page_url = upload_web_page_to_s3(html_content, meaningful_id)
-                            
-                            if web_page_url:
-                                qr_image_bytes = generate_qr_code(web_page_url)
-                                
-                                # Generate the combined reminder image
-                                reminder_image = create_reminder_image(pet_name, product_name, reminder_details, qr_image_bytes)
-                                
-                                # Convert PIL image to bytes for download
-                                img_buffer = io.BytesIO()
-                                reminder_image.save(img_buffer, format='PNG', quality=95, dpi=(300, 300))
-                                reminder_image_bytes = img_buffer.getvalue()
-                                
-                                # Upload reminder image to S3
-                                reminder_image_url = upload_reminder_image_to_s3(reminder_image_bytes, meaningful_id)
-                                
-                                # Display reminder card instead of QR code
-                                st.image(reminder_image_bytes, use_container_width=True)
-                                
-                                with st.expander("📥 Download Options"):
-                                    # Download reminder Card with QR code
-                                    st.download_button(
-                                        label="🖼️ Download Reminder Card (with QR Code)",
-                                        data=reminder_image_bytes,
-                                        file_name=f"{meaningful_id}_reminder_image.png",
-                                        mime="image/png"
-                                    )
-                                    
-                                    st.download_button(
-                                        label="📥 Download QR Code Only",
-                                        data=qr_image_bytes,
-                                        file_name=f"{meaningful_id}_qr.png",
-                                        mime="image/png"
-                                    )
-                                    
-                                    st.download_button(
-                                        label="📅 Download Calendar File", 
-                                        data=calendar_data,
-                                        file_name=f"{meaningful_id}.ics",
-                                        mime="text/calendar"
-                                    )
-                                
-                                with st.expander("🔗 URLs"):
-                                    st.write(f"**QR Web Page URL:** {web_page_url}")
-                                    st.write(f"**Calendar File URL:** {calendar_url}")
-                                    if reminder_image_url:
-                                        st.write(f"**Reminder Card URL:** {reminder_image_url}")
-                                    else:
-                                        st.write("**Reminder Card URL:** ❌ Upload failed")
-                                    
-                                with st.expander("📋 Reminder Summary"):
-                                    st.write(f"**Pet:** {pet_name}")
-                                    st.write(f"**Product:** {product_name}")
-                                    st.write(f"**Start Date:** {start_date.strftime('%Y-%m-%d')}")
-                                    st.write(f"**End Date:** {end_date.strftime('%Y-%m-%d')}")
-                                    st.write(f"**Frequency:** {frequency}")
-                                    if frequency_value:
-                                        st.write(f"**Every:** {frequency_value} days")
-                                    st.write(f"**Duration:** {duration_text}")
-                                    st.write(f"**Total Reminders:** {total_reminders}")
-                                    st.write(f"**Times per day:** {len(selected_times)}")
-                                    for time_info in selected_times:
-                                        st.write(f"  • {time_info['time']} - {time_info['label']}")
-                                    if notes:
-                                        st.write(f"**Notes:** {notes}")
-                                                                
-                            else:
-                                st.error("❌ Failed to create web page - check S3 permissions")
-                        else:
-                            st.error("❌ Failed to upload calendar file - check S3 configuration")
-                        
-                    except Exception as e:
-                        st.error(f"Error generating QR code: {str(e)}")
+                    success = generate_content(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes)
+                    if success:
+                        st.success("✅ QR Reminder Card generated successfully!")
+                        st.rerun()  # Refresh to show generated content
             elif not selected_times:
                 st.warning("⚠️ Please select at least one reminder time")
             elif end_date < start_date:
                 st.warning("⚠️ End date must be on or after start date")
             else:
                 st.warning("⚠️ Please fill in Pet Name and Product Name")
+        
+        # Add a "Clear Form" button to reset everything
+        if st.button("🗑️ Clear Form", key="clear_btn"):
+            # Clear session state
+            st.session_state.form_data = {}
+            st.session_state.generated_content = None
+            st.session_state.content_generated = False
+            st.rerun()
+    
+    with col2:
+        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
+        
+        # Display generated content if available
+        if st.session_state.content_generated and st.session_state.generated_content:
+            display_generated_content()
         else:
             st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
 
