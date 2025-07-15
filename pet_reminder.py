@@ -136,8 +136,24 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
         msg['To'] = recipient_email
         msg['Subject'] = f"🐾 Pet QR Reminder Card - {pet_name} ({product_name}) 🐾"
         
-        # Generate unique CID for QR code
+        # Generate unique CIDs for embedded images
         qr_cid = f"qr_code_{uuid.uuid4().hex}"
+        logo_cid = f"logo_{uuid.uuid4().hex}"
+        
+        # Load BI Logo for embedding
+        logo_image_bytes = None
+        if os.path.exists("BI-Logo-2.png"):
+            try:
+                with open("BI-Logo-2.png", "rb") as f:
+                    logo_image_bytes = f.read()
+            except Exception as e:
+                print(f"Error loading BI-Logo-2.png: {e}")
+        elif os.path.exists("BI-Logo.png"):
+            try:
+                with open("BI-Logo.png", "rb") as f:
+                    logo_image_bytes = f.read()
+            except Exception as e:
+                print(f"Error loading BI-Logo.png: {e}")
         
         # Gmail Mobile Optimized HTML - Simplified layout with tables
         html_body = f"""
@@ -176,10 +192,36 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
             text-align: center;
         }}
         
+        .header-content {{
+            display: table;
+            width: 100%;
+            margin: 0 auto;
+        }}
+        
+        .logo-section {{
+            display: table-cell;
+            vertical-align: middle;
+            width: 80px;
+            text-align: left;
+        }}
+        
+        .logo-img {{
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            display: block;
+        }}
+        
+        .title-section {{
+            display: table-cell;
+            vertical-align: middle;
+            text-align: center;
+        }}
+        
         .header h1 {{
             color: #00e47c;
             font-size: 24px;
-            margin-bottom: 5px;
+            margin: 5px 0;
             font-weight: bold;
         }}
         
@@ -375,6 +417,25 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                 width: 100% !important;
             }}
             
+            .header-content {{
+                display: block !important;
+            }}
+            
+            .logo-section,
+            .title-section {{
+                display: block !important;
+                width: 100% !important;
+                text-align: center !important;
+            }}
+            
+            .logo-section {{
+                margin-bottom: 10px;
+            }}
+            
+            .logo-img {{
+                margin: 0 auto !important;
+            }}
+            
             .header h1 {{
                 font-size: 20px !important;
             }}
@@ -429,8 +490,15 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                 <td>
                     <!-- Header -->
                     <div class="header">
-                        <h1>🐾 Pet QR Reminder Card 🐾</h1>
-                        <p>Schedule for <strong>{pet_name} ({product_name})</strong></p>
+                        <div class="header-content">
+                            <div class="logo-section">
+                                {f'<img src="cid:{logo_cid}" alt="BI Logo" class="logo-img" style="width: 60px; height: 60px; object-fit: contain; display: block;" />' if logo_image_bytes else ''}
+                            </div>
+                            <div class="title-section">
+                                <h1>🐾 Pet QR Reminder Card 🐾</h1>
+                                <p>Schedule for <strong>{pet_name} ({product_name})</strong></p>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- QR Code Section -->
@@ -596,6 +664,13 @@ Pet Reminder System
             qr_embedded.add_header('Content-ID', f'<{qr_cid}>')
             qr_embedded.add_header('Content-Disposition', 'inline', filename=f"{pet_name}_qr_code.png")
             msg.attach(qr_embedded)
+        
+        # Embed BI Logo as related attachment (CID) - Gmail compatible
+        if logo_image_bytes:
+            logo_embedded = MIMEImage(logo_image_bytes)
+            logo_embedded.add_header('Content-ID', f'<{logo_cid}>')
+            logo_embedded.add_header('Content-Disposition', 'inline', filename="bi_logo.png")
+            msg.attach(logo_embedded)
         
         # Attach the full reminder card image as attachment
         reminder_card_attachment = MIMEImage(reminder_image_bytes)
