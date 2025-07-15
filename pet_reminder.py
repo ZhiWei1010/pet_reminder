@@ -518,17 +518,13 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                         </div>
                         '''}
                         
-                        <div class="qr-instructions">
-                            Point your phone camera at the QR code above
-                        </div>
+                        
                         
                         <div class="qr-link">
                             Can't scan? <a href="{web_page_url}">Click here instead</a>
                         </div>
                         
-                        <div class="scan-tip">
-                            💡 <strong>Tip:</strong> Most phones can scan QR codes directly with the camera app
-                        </div>
+                        
                     </div>
                     
                     <!-- Details Section -->
@@ -579,29 +575,7 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                         ''' if reminder_details.get('notes') and reminder_details['notes'].strip() else ''}
                     </div>
                     
-                    <!-- Instructions -->
-                    <div class="instructions">
-                        <div class="instructions-title">📱 How to Use:</div>
-                        <div class="instruction-text">
-                            1. Scan the QR code with your phone camera<br>
-                            2. Download the calendar file from the attachments<br>
-                            3. Add the calendar file (.ics) to your calendar app<br>
-                            4. You'll receive automatic reminders!
-                        </div>
-                    </div>
                     
-                    <!-- Attachment Note -->
-                    <div class="attachment-note">
-                        <strong>📎 Attachments Included:</strong><br>
-                        • Full Reminder Card (PNG image)<br>
-                        • Calendar File (.ics) - Add this to your phone's calendar
-                    </div>
-                    
-                    <!-- Footer -->
-                    <div class="footer">
-                        <div>Pet Reminder System</div>
-                        <div>Powered by Boehringer Ingelheim</div>
-                    </div>
                 </td>
             </tr>
         </table>
@@ -2120,7 +2094,6 @@ def main():
             st.session_state.generated_content = None
             st.session_state.content_generated = False
             st.rerun()
-    
     with col2:
         st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
         
@@ -2131,5 +2104,4 @@ def main():
             st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
                         
 if __name__ == "__main__":
-    main()
-        
+    main()        
