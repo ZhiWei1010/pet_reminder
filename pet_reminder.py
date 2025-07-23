@@ -953,50 +953,6 @@ def display_generated_content():
     
     # Display reminder card
     st.image(content['reminder_image_bytes'], use_container_width=True)
-    
-    with st.expander("📥 Download Options"):
-        # Download reminder Card with QR code
-        st.download_button(
-            label="🖼️ Download Reminder Card (with QR Code)",
-            data=content['reminder_image_bytes'],
-            file_name=f"{content['meaningful_id']}_reminder_image.png",
-            mime="image/png",
-            key="download_reminder_card"
-        )
-        
-        st.download_button(
-            label="📥 Download QR Code Only",
-            data=content['qr_image_bytes'],
-            file_name=f"{content['meaningful_id']}_qr.png",
-            mime="image/png",
-            key="download_qr_only"
-        )
-        
-        st.download_button(
-            label="📅 Download Calendar File", 
-            data=content['calendar_data'],
-            file_name=f"{content['meaningful_id']}.ics",
-            mime="text/calendar",
-            key="download_calendar"
-        )
-    
-    with st.expander("🔗 URLs"):
-        if content['web_page_url']:
-            st.write(f"**QR Web Page URL:** {content['web_page_url']}")
-        else:
-            st.write("**QR Web Page URL:** ❌ S3 not configured")
-            
-        if content['calendar_url']:
-            st.write(f"**Calendar File URL:** {content['calendar_url']}")
-        else:
-            st.write("**Calendar File URL:** ❌ S3 not configured")
-            
-        if content['reminder_image_url']:
-            st.write(f"**Reminder Card URL:** {content['reminder_image_url']}")
-        elif AWS_CONFIGURED:
-            st.write("**Reminder Card URL:** ❌ Upload failed")
-        else:
-            st.write("**Reminder Card URL:** ❌ S3 not configured")
             
     with st.expander("📋 Reminder Summary"):
         details = content['reminder_details']
