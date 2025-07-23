@@ -11,10 +11,6 @@ import urllib.parse
 import hashlib
 import boto3
 import math
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.image import MIMEImage
 import re
 import uuid
 
@@ -33,23 +29,12 @@ if "AWS_REGION" in st.secrets:
     aws_access_key_id = st.secrets["AWS_ACCESS_KEY_ID"]
     aws_secret_access_key = st.secrets["AWS_SECRET_ACCESS_KEY"]
     
-    # Email Configuration from secrets
-    SMTP_SERVER = st.secrets.get("SMTP_SERVER", "smtp.gmail.com")
-    SMTP_PORT = int(st.secrets.get("SMTP_PORT", "587"))
-    EMAIL_USER = st.secrets.get("EMAIL_USER", "")
-    EMAIL_PASSWORD = st.secrets.get("EMAIL_PASSWORD", "")
 else:
     # Development: Use environment variables
     AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
     S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')
     aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-    
-    # Email Configuration
-    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-    SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
-    EMAIL_USER = os.getenv('EMAIL_USER', '')
-    EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', '')
 
 # Initialize AWS client
 try:
