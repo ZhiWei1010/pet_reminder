@@ -1811,23 +1811,9 @@ def main():
         )
         
         products = [
-            "Broadline",
-            "Eurican L4",
-            "Heartgard Plus",
-            "Metacam", 
             "NexGard",
             "NexGard SPECTRA",
             "NexGard COMBO",
-            "Prascend",
-            "Previcox",
-            "ProZinc",
-            "PUREVAX",
-            "Rabisin / Imrab",
-            "Rabisin / Raboral V-RG",
-            "Semintra",
-            "SENVELGO",
-            "Vetmedin",	    
-            "Other"
         ]
         
         saved_product = get_form_data('product_name', products[0])
@@ -1841,14 +1827,6 @@ def main():
             index=product_index,
             key="product_select"
         )
-        
-        if product_name == "Other":
-            product_name = st.text_input(
-                "Custom Product Name", 
-                placeholder="Enter product name",
-                value=get_form_data('custom_product', ''),
-                key="custom_product_input"
-            )
         
         # Date Range Selection
         st.markdown("**📅 Reminder Period**")
