@@ -953,18 +953,6 @@ def display_generated_content():
     
     # Display reminder card
     st.image(content['reminder_image_bytes'], use_container_width=True)
-            
-    with st.expander("📋 Reminder Summary"):
-        details = content['reminder_details']
-        st.write(f"**Pet:** {content['pet_name']}")
-        st.write(f"**Product:** {content['product_name']}")
-        st.write(f"**Start Date:** {details['start_date']}")
-        st.write(f"**Frequency:** {details['frequency']}")
-        st.write(f"**Duration:** {details['duration']}")
-        st.write(f"**Total Reminders:** {details['total_reminders']}")
-        st.write(f"**Reminder Time:** {details['times']}")
-        if details.get('notes'):
-            st.write(f"**Notes:** {details['notes']}")
 
 def main():
     # Initialize session state
