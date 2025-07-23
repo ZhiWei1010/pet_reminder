@@ -1,7 +1,7 @@
 import streamlit as st
 import qrcode
 from icalendar import Calendar, Event, Alarm
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 import io
 import base64
 from PIL import Image, ImageDraw, ImageFont
@@ -1830,140 +1830,26 @@ def main():
         st.markdown("Reminder Frequency: **Monthly**")
         
         # Multiple Times Per Day with Duration Limits
-        st.markdown("**⏰ Reminder Times**")
-        
-        # Define time periods with their valid ranges
-        time_periods = {
-            "Morning": {
-                "default": "08:00",
-                "min_hour": 5,   # 5:00 AM
-                "max_hour": 11,  # 11:59 AM
-                "options": [f"{h:02d}:{m:02d}" for h in range(5, 12) for m in [0, 15, 30, 45]]
-            },
-            "Afternoon": {
-                "default": "14:00", 
-                "min_hour": 12,  # 12:00 PM
-                "max_hour": 17,  # 5:59 PM
-                "options": [f"{h:02d}:{m:02d}" for h in range(12, 18) for m in [0, 15, 30, 45]]
-            },
-            "Evening": {
-                "default": "19:00",
-                "min_hour": 18,  # 6:00 PM
-                "max_hour": 21,  # 9:59 PM
-                "options": [f"{h:02d}:{m:02d}" for h in range(18, 22) for m in [0, 15, 30, 45]]
-            },
-            "Night": {
-                "default": "22:00",
-                "min_hour": 22,  # 10:00 PM
-                "max_hour": 4,   # 4:59 AM (next day)
-                "options": [f"{h:02d}:{m:02d}" for h in range(22, 24) for m in [0, 15, 30, 45]] + 
-                          [f"{h:02d}:{m:02d}" for h in range(0, 5) for m in [0, 15, 30, 45]]
-            }
-        }
+        st.markdown("**⏰ Reminder Time (Optional)**")
         
         # Get saved selected times or use empty list
-        saved_times = get_form_data('selected_times', [])
-        saved_time_periods = [t['label'] for t in saved_times] if saved_times else []
-        
-        # Let user select which times they want
-        selected_times = []
-        
-        col_time1, col_time2 = st.columns(2)
-        
-        with col_time1:
-            morning_checked = "Morning" in saved_time_periods
-            if st.checkbox("🌅 Morning", key="morning", value=morning_checked):
-                morning_options = time_periods["Morning"]["options"]
-                # Find saved time or use default
-                saved_morning_time = next((t['time'] for t in saved_times if t['label'] == 'Morning'), time_periods["Morning"]["default"])
-                default_idx = morning_options.index(saved_morning_time) if saved_morning_time in morning_options else 0
-                morning_time = st.selectbox(
-                    "Morning time", 
-                    options=morning_options,
-                    index=default_idx,
-                    key="morning_time"
-                )
-                selected_times.append({"time": morning_time, "label": "Morning"})
-                
-            afternoon_checked = "Afternoon" in saved_time_periods
-            if st.checkbox("☀️ Afternoon", key="afternoon", value=afternoon_checked):
-                afternoon_options = time_periods["Afternoon"]["options"]
-                saved_afternoon_time = next((t['time'] for t in saved_times if t['label'] == 'Afternoon'), time_periods["Afternoon"]["default"])
-                default_idx = afternoon_options.index(saved_afternoon_time) if saved_afternoon_time in afternoon_options else 0
-                afternoon_time = st.selectbox(
-                    "Afternoon time", 
-                    options=afternoon_options,
-                    index=default_idx,
-                    key="afternoon_time"
-                )
-                selected_times.append({"time": afternoon_time, "label": "Afternoon"})
-        
-        with col_time2:
-            evening_checked = "Evening" in saved_time_periods
-            if st.checkbox("🌇 Evening", key="evening", value=evening_checked):
-                evening_options = time_periods["Evening"]["options"]
-                saved_evening_time = next((t['time'] for t in saved_times if t['label'] == 'Evening'), time_periods["Evening"]["default"])
-                default_idx = evening_options.index(saved_evening_time) if saved_evening_time in evening_options else 0
-                evening_time = st.selectbox(
-                    "Evening time", 
-                    options=evening_options,
-                    index=default_idx,
-                    key="evening_time"
-                )
-                selected_times.append({"time": evening_time, "label": "Evening"})
-                
-            night_checked = "Night" in saved_time_periods
-            if st.checkbox("🌙 Night", key="night", value=night_checked):
-                night_options = time_periods["Night"]["options"]
-                saved_night_time = next((t['time'] for t in saved_times if t['label'] == 'Night'), time_periods["Night"]["default"])
-                default_idx = night_options.index(saved_night_time) if saved_night_time in night_options else 0
-                night_time = st.selectbox(
-                    "Night time", 
-                    options=night_options,
-                    index=default_idx,
-                    key="night_time"
-                )
-                selected_times.append({"time": night_time, "label": "Night"})
+        saved_times = get_form_data('selected_time', [])
         
         # Option for custom time with validation
-        custom_times = [t for t in saved_times if t['label'] not in ['Morning', 'Afternoon', 'Evening', 'Night']]
-        custom_checked = len(custom_times) > 0
-        
-        if st.checkbox("🕐 Custom Time", key="custom", value=custom_checked):
-            saved_custom_time = custom_times[0]['time'] if custom_times else "12:00"
-            saved_custom_label = custom_times[0]['label'] if custom_times else ""
-            
-            custom_time = st.time_input(
-                "Custom time", 
-                value=datetime.strptime(saved_custom_time, "%H:%M").time(), 
-                key="custom_time"
-            )
-            custom_label = st.text_input(
-                "Custom label", 
-                placeholder="e.g., Lunch, Bedtime", 
-                value=saved_custom_label,
-                key="custom_label"
-            )
-            
-            if custom_label:
-                # Check if custom time overlaps with selected periods
-                custom_hour = custom_time.hour
-                overlap_warning = ""
-                
-                for period_name, period_info in time_periods.items():
-                    if period_name == "Night":
-                        # Special handling for night period (crosses midnight)
-                        if custom_hour >= 22 or custom_hour <= 4:
-                            overlap_warning = f"⚠️ This time overlaps with Night period"
-                    else:
-                        if period_info["min_hour"] <= custom_hour <= period_info["max_hour"]:
-                            overlap_warning = f"⚠️ This time overlaps with {period_name} period"
-                
-                if overlap_warning:
-                    st.warning(overlap_warning)
-                
-                selected_times.append({"time": custom_time.strftime("%H:%M"), "label": custom_label})
-        
+        custom_time_data = saved_times[0] if saved_times else None
+        custom_checked = custom_time_data is not None
+
+        use_custom_time = st.checkbox("🕐 Custom Time", key="custom", value=custom_checked)
+
+        default_time = default_time = datetime.strptime("12:00", "%H:%M").time()
+
+        # Determine the reminder time
+        if use_custom_time:
+            custom_time = st.time_input("Select custom time", value=default_time, key="custom_time")
+            selected_time = custom_time.strftime("%H:%M")
+        else:
+            selected_time = default_time.strftime("%H:%M")
+
         notes = st.text_area(
             "Additional Notes (Optional)", 
             placeholder="e.g., Give with food, Check for side effects",
@@ -1971,10 +1857,7 @@ def main():
             key="notes_input"
         )
         
-        # Show selected times summary
-        if selected_times:
-            times_summary = ', '.join([f"{t['time']} ({t['label']})" for t in selected_times])
-            st.info(f"📅 Selected times: {times_summary}")
+        st.info(f"📅 Selected times: {selected_time}")
         
         # Save form data and generate button
         if st.button("🔄 Generate QR Reminder Card", type="primary", key="generate_btn"):
