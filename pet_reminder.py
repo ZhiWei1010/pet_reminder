@@ -541,10 +541,6 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                                 <td class="detail-value">{reminder_details['start_date']}</td>
                             </tr>
                             <tr>
-                                <td class="detail-label">End Date:</td>
-                                <td class="detail-value">{reminder_details['end_date']}</td>
-                            </tr>
-                            <tr>
                                 <td class="detail-label">Frequency:</td>
                                 <td class="detail-value">{reminder_details['frequency']}</td>
                             </tr>
@@ -559,8 +555,8 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
                         </table>
                         
                         <div class="times-section">
-                            <div class="times-title">⏰ Reminder Times:</div>
-                            {"".join([f'<div class="time-item">• {time_info["time"]} - {time_info["label"]}</div>' for time_info in reminder_details['times']])}
+                            <div class="times-title">⏰ Reminder Time:</div>
+                            {"".join([f'<div class="time-item">• {reminder_details['times']}</div>'])}
                         </div>
                         
                         {f'''
@@ -590,15 +586,13 @@ def send_email_with_attachment(recipient_email, pet_name, product_name, reminder
 • Pet Name: {pet_name}
 • Product: {product_name}
 • Start Date: {reminder_details['start_date']}
-• End Date: {reminder_details['end_date']}
 • Frequency: {reminder_details['frequency']}
 • Duration: {reminder_details['duration']}
 • Total Reminders: {reminder_details['total_reminders']}
 
 ⏰ Reminder Times:
 """
-        for time_info in reminder_details['times']:
-            text_body += f"• {time_info['time']} - {time_info['label']}\n"
+        text_body += f"• {reminder_details['times']}\n"
         
         if reminder_details.get('notes'):
             text_body += f"\n📝 Additional Notes:\n{reminder_details['notes']}\n"
@@ -665,16 +659,14 @@ Pet Reminder System
     except Exception as e:
         return False, f"Failed to send email: {str(e)}"
 
-def save_form_data(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes):
+def save_form_data(pet_name, product_name, start_date, dosage, selected_time, notes):
     """Save current form data to session state"""
     st.session_state.form_data = {
         'pet_name': pet_name,
         'product_name': product_name,
         'start_date': start_date,
-        'end_date': end_date,
-        'frequency': frequency,
-        'frequency_value': frequency_value,
-        'selected_times': selected_times,
+        'dosage': dosage,
+        'selected_time': selected_time,
         'notes': notes
     }
 
@@ -684,7 +676,7 @@ def get_form_data(key, default=None):
 
 def format_duration_text(start_date, dosage):
     """Format duration text for display"""
-    total_days = (start_date).days + dosage * 30
+    total_days = dosage * 30
     
     if total_days <= 7:
         return f"{total_days} day{'s' if total_days > 1 else ''}"
@@ -784,10 +776,10 @@ def generate_meaningful_id(pet_name, product_name):
     
     return meaningful_id
 
-def create_calendar_reminder(pet_name, product_name, frequency, frequency_value, reminder_times, start_date, end_date, notes=""):
+def create_calendar_reminder(pet_name, product_name, dosage, reminder_time, start_date, notes=""):
     
     # Calculate reminder count for RRULE
-    reminder_count = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
+    reminder_count = dosage
     
     # Create calendar
     cal = Calendar()
@@ -795,54 +787,38 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
     cal.add('version', '2.0')
     cal.add('calscale', 'GREGORIAN')
     cal.add('method', 'PUBLISH')
+
+    # Create event
+    event = Event()
+    event_title = f"{pet_name} - {product_name}"
     
-    # Create separate events for each time of day
-    for i, time_info in enumerate(reminder_times):
-        time_str = time_info['time']
-        time_label = time_info['label']
-        
-        # Create event
-        event = Event()
-        event_title = f"{pet_name} - {product_name}"
-        if len(reminder_times) > 1:
-            event_title += f" ({time_label})"
-        
-        event.add('summary', event_title)
-        event.add('description', f"Medication reminder: {product_name}\nPet: {pet_name}\nTime: {time_label}\n{notes}")
-        
-        # Calculate start time using the provided start_date
-        start_time = datetime.combine(start_date, datetime.strptime(time_str, "%H:%M").time())
-        
-        event.add('dtstart', start_time)
-        event.add('dtend', start_time + timedelta(hours=1))
-        event.add('dtstamp', datetime.now())
-        event.add('uid', str(uuid.uuid4()))
-        
-        # Add recurrence rule with count limit
-        rrule = {}
-        
-        if frequency == "Daily":
-            rrule['freq'] = 'daily'
-        elif frequency == "Weekly":
-            rrule['freq'] = 'weekly'
-        elif frequency == "Monthly":
-            rrule['freq'] = 'monthly'
-        elif frequency == "Custom Days":
-            rrule['freq'] = 'daily'
-            rrule['interval'] = int(frequency_value)
-        
-        if reminder_count > 0:
-            rrule['count'] = reminder_count
-        
-        event.add('rrule', rrule)
-        
-        alarm = Alarm()
-        alarm.add('action', 'DISPLAY')
-        alarm.add('description', f'Time to give {product_name} to {pet_name}! ({time_label})')
-        alarm.add('trigger', timedelta(minutes=-15))  # 15 minutes before
-        event.add_component(alarm)
-        
-        cal.add_component(event)
+    event.add('summary', event_title)
+    event.add('description', f"Nexgard reminder: {product_name}\nPet: {pet_name}\nTime: {reminder_time}\n{notes}")
+    
+    # Calculate start time using the provided start_date
+    start_time = datetime.combine(start_date, datetime.strptime(reminder_time, "%H:%M").time())
+    
+    event.add('dtstart', start_time)
+    event.add('dtend', start_time + timedelta(hours=1))
+    event.add('dtstamp', datetime.now())
+    event.add('uid', str(uuid.uuid4()))
+    
+    # Add recurrence rule with count limit
+    rrule = {}
+    rrule['freq'] = 'monthly'
+    
+    if reminder_count > 0:
+        rrule['count'] = reminder_count
+    
+    event.add('rrule', rrule)
+    
+    alarm = Alarm()
+    alarm.add('action', 'DISPLAY')
+    alarm.add('description', f'Time to give {product_name} to {pet_name}!')
+    alarm.add('trigger', timedelta(minutes=-15))  # 15 minutes before
+    event.add_component(alarm)
+    
+    cal.add_component(event)
     
     return cal.to_ical().decode('utf-8')
 
@@ -900,8 +876,7 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
     
     # Format reminder times for display
     times_html_list = ""
-    for t in reminder_details['times']:
-        times_html_list += f"• {t['time']} - {t['label']}<br>"
+    times_html_list += f"• {reminder_details['times']}<br>"
     times_html_list = times_html_list.rstrip('<br>')
     
     html_content = f"""
@@ -1159,10 +1134,6 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
                 <span class="detail-value">{reminder_details['start_date']}</span>
             </div>
             <div class="detail-row">
-                <span class="detail-label">End Date:</span>
-                <span class="detail-value">{reminder_details['end_date']}</span>
-            </div>
-            <div class="detail-row">
                 <span class="detail-label">Duration:</span>
                 <span class="detail-value">{reminder_details['duration']}</span>
             </div>
@@ -1383,15 +1354,11 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     # Format frequency better
     frequency_text = reminder_details['frequency']
-    if reminder_details['frequency'] == 'Custom Days':
-        frequency_text = f"Every {reminder_details.get('frequency_value', 'X')} days"
-    
-    
+
     details = [
         f" ",
         f"• Frequency: {frequency_text}",
         f"• Starts: {reminder_details['start_date']}",
-        f"• Ends: {reminder_details['end_date']}",
         f"• Duration: {reminder_details['duration']}",
         f"• Total: {reminder_details['total_reminders']} reminders",
         f" "
@@ -1402,9 +1369,9 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     # Times section (tighter spacing) - REPLACE ICON WITH TEXT
     times_y = details_y + len(details) * 25 + 15  # Reduced spacing
-    draw.text((left_x, times_y), "Reminder Timings:", fill=accent_color, font=detail_font)
+    draw.text((left_x, times_y), "Reminder Time:", fill=accent_color, font=detail_font)
     
-    times_text = " / ".join([f"{t['time']} ({t['label']})" for t in reminder_details['times']])
+    times_text = reminder_details['times']
     draw.text((left_x + 20, times_y + 30), f"{times_text}", fill=text_color, font=small_font)
     
     # Notes if present (tighter spacing) - REPLACE ICON WITH TEXT
@@ -1471,21 +1438,18 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     return img
 
-def generate_content(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes):
+def generate_content(pet_name, product_name, start_date, dosage, selected_time, notes):
     """Generate all content and save to session state"""
     try:
         # Calculate reminder count
-        total_reminders = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
-        duration_text = format_duration_text(start_date, end_date, total_reminders, frequency)
+        duration_text = format_duration_text(start_date, dosage=12)
         
         calendar_data = create_calendar_reminder(
             pet_name=pet_name,
             product_name=product_name,
-            frequency=frequency,
-            frequency_value=frequency_value,
-            reminder_times=selected_times,
+            dosage=dosage,
+            reminder_time=selected_time,
             start_date=start_date,
-            end_date=end_date,
             notes=notes
         )
         
@@ -1495,13 +1459,11 @@ def generate_content(pet_name, product_name, start_date, end_date, frequency, fr
         calendar_url = upload_to_s3(calendar_data, meaningful_id)
         
         reminder_details = {
-            'frequency': frequency,
-            'frequency_value': frequency_value,
+            'frequency': 'Monthly',
             'start_date': start_date.strftime('%Y-%m-%d'),
-            'end_date': end_date.strftime('%Y-%m-%d'),
             'duration': duration_text,
-            'total_reminders': total_reminders,
-            'times': selected_times,
+            'total_reminders': dosage,
+            'times': selected_time,
             'notes': notes
         }
         
@@ -1694,15 +1656,10 @@ def display_generated_content():
         st.write(f"**Pet:** {content['pet_name']}")
         st.write(f"**Product:** {content['product_name']}")
         st.write(f"**Start Date:** {details['start_date']}")
-        st.write(f"**End Date:** {details['end_date']}")
         st.write(f"**Frequency:** {details['frequency']}")
-        if details.get('frequency_value'):
-            st.write(f"**Every:** {details['frequency_value']} days")
         st.write(f"**Duration:** {details['duration']}")
         st.write(f"**Total Reminders:** {details['total_reminders']}")
-        st.write(f"**Times per day:** {len(details['times'])}")
-        for time_info in details['times']:
-            st.write(f"  • {time_info['time']} - {time_info['label']}")
+        st.write(f"**Reminder Time:** {details['times']}")
         if details.get('notes'):
             st.write(f"**Notes:** {details['notes']}")
 
@@ -1858,20 +1815,16 @@ def main():
         st.info(f"📅 Reminder Frequency: **Monthly** \t\t 🕛 Reminder time: **{selected_time}**")
         
         # Save form data and generate button
-        if st.button("🔄 Generate QR Reminder Card", type="primary", key="generate_btn"):
-            if pet_name and product_name and selected_times and end_date >= start_date:
+        if st.button("🔄 Submit", type="primary", key="submit_btn"):
+            if pet_name and product_name:
                 # Save form data to session state
-                save_form_data(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes)
+                save_form_data(pet_name, product_name, start_date, dosage, selected_time, notes)
                 
-                with st.spinner("QR Reminder Card Generation in Progress...."):
-                    success = generate_content(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes)
+                with st.spinner("Submitting ...."):
+                    success = generate_content(pet_name, product_name, start_date, dosage, selected_time, notes)
                     if success:
-                        st.success("✅ QR Reminder Card generated successfully!")
+                        st.success("✅ Calendar reminder generated successfully!")
                         st.rerun()  # Refresh to show generated content
-            elif not selected_times:
-                st.warning("⚠️ Please select at least one reminder time")
-            elif end_date < start_date:
-                st.warning("⚠️ End date must be on or after start date")
             else:
                 st.warning("⚠️ Please fill in Pet Name and Product Name")
         
