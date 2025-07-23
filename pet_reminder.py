@@ -682,32 +682,9 @@ def get_form_data(key, default=None):
     """Get form data from session state"""
     return st.session_state.form_data.get(key, default)
 
-def calculate_reminder_count(start_date, end_date, frequency, frequency_value=None):
-    """Calculate total number of reminders based on date range and frequency"""
-    if end_date < start_date:
-        return 0
-    
-    total_days = (end_date - start_date).days + 1  # Include both start and end dates
-    
-    if frequency == "Daily":
-        return total_days
-    elif frequency == "Weekly":
-        return math.ceil(total_days / 7)
-    elif frequency == "Monthly":
-        # Calculate months between dates
-        months = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
-        # Add 1 if we haven't passed the start day in the end month
-        if end_date.day >= start_date.day:
-            months += 1
-        return max(1, months)
-    elif frequency == "Custom Days" and frequency_value:
-        return math.ceil(total_days / frequency_value)
-    
-    return 0
-
-def format_duration_text(start_date, end_date, reminder_count, frequency):
+def format_duration_text(start_date, dosage):
     """Format duration text for display"""
-    total_days = (end_date - start_date).days + 1
+    total_days = (start_date).days + dosage * 30
     
     if total_days <= 7:
         return f"{total_days} day{'s' if total_days > 1 else ''}"
@@ -1840,56 +1817,17 @@ def main():
                 help="First day of reminders",
                 key="start_date_input"
             )
-        
+
         with col_end:
-            # Default end date to end of current year
-            current_year = date.today().year
-            default_end_date = date(current_year, 12, 31)
-            
-            end_date = st.date_input(
-                "End Date",
-                value=get_form_data('end_date', default_end_date),
-                min_value=date.today(),
-                help="Last day of reminders",
-                key="end_date_input"
+            dosage = st.number_input(
+                "Number of Dosages",
+                value = get_form_data('dosage', 12),
+                min_value = 12,
+                help = "Number of Capsules you have",
+                key="number_of_dosage"
             )
         
-        # Validate date range
-        if end_date < start_date:
-            st.error("⚠️ End date must be on or after start date")
-        
-        frequency_options = ["Daily", "Weekly", "Monthly", "Custom Days"]
-        saved_frequency = get_form_data('frequency', 'Daily')
-        frequency_index = 0
-        if saved_frequency in frequency_options:
-            frequency_index = frequency_options.index(saved_frequency)
-        
-        frequency = st.selectbox(
-            "Reminder Frequency", 
-            frequency_options, 
-            index=frequency_index,
-            key="frequency_select"
-        )
-        
-        frequency_value = None
-        if frequency == "Custom Days":
-            frequency_value = st.number_input(
-                "Every X days", 
-                min_value=1, 
-                max_value=365, 
-                value=get_form_data('frequency_value', 7),
-                key="frequency_value_input"
-            )
-        
-        # Calculate and show reminder count
-        if start_date and end_date and end_date >= start_date:
-            reminder_count = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
-            duration_text = format_duration_text(start_date, end_date, reminder_count, frequency)
-            
-            if reminder_count > 0:
-                st.info(f"💡 This will create **{reminder_count} reminders** over {duration_text}")
-            else:
-                st.warning("⚠️ No reminders will be generated with these settings")
+        st.markdown("Reminder Frequency: **Monthly**")
         
         # Multiple Times Per Day with Duration Limits
         st.markdown("**⏰ Reminder Times**")
