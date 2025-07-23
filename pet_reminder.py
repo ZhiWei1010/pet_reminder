@@ -18,7 +18,7 @@ import uuid
 st.set_page_config(
     page_title="Pet Reminder",
     page_icon="🐾",
-    layout="wide"
+    layout="centered"
 )
 
 # AWS Configuration - Use Streamlit secrets for cloud deployment
@@ -1020,120 +1020,110 @@ def main():
         """, unsafe_allow_html=True)
         
     st.text("") 
-    
+
     # Main form
-    col1, spacer, col2 = st.columns([1, 0.2, 1])
+    st.markdown("<h6 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h6>", unsafe_allow_html=True)
     
-    with col1:
-        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h6>", unsafe_allow_html=True)
-        
-        # Use session state values as defaults to maintain form data
-        pet_name = st.text_input(
-            "Pet Name", 
-            placeholder="e.g., Daisy, Luna, Charlie",
-            value=get_form_data('pet_name', ''),
-            key="pet_name_input"
-        )
-        
-        products = [
-            "NexGard",
-            "NexGard SPECTRA",
-            "NexGard COMBO",
-        ]
-        
-        saved_product = get_form_data('product_name', products[0])
-        product_index = 0
-        if saved_product in products:
-            product_index = products.index(saved_product)
-        
-        product_name = st.selectbox(
-            "BI Pet Product", 
-            products, 
-            index=product_index,
-            key="product_select"
-        )
-        
-        # Date Range Selection
-        st.markdown("**📅 Reminder Period**")
-        col_start, col_end = st.columns(2)
-        
-        with col_start:
-            start_date = st.date_input(
-                "Start Date",
-                value=get_form_data('start_date', date.today()),
-                min_value=date.today(),
-                help="First day of reminders",
-                key="start_date_input"
-            )
-
-        with col_end:
-            dosage = st.number_input(
-                "Number of Dosages",
-                value = get_form_data('dosage', 12),
-                min_value = 12,
-                help = "Number of Capsules you have",
-                key="number_of_dosage"
-            )
-        
-        # Multiple Times Per Day with Duration Limits
-        st.markdown("**⏰ Reminder Time (Optional)**")
-        
-        # Get saved selected times or use empty list
-        saved_times = get_form_data('selected_time', [])
-        
-        # Option for custom time with validation
-        custom_time_data = saved_times[0] if saved_times else None
-        custom_checked = custom_time_data is not None
-
-        use_custom_time = st.checkbox("🕐 Custom Time", key="custom", value=custom_checked)
-
-        default_time = default_time = datetime.strptime("12:00", "%H:%M").time()
-
-        # Determine the reminder time
-        if use_custom_time:
-            custom_time = st.time_input("Select custom time", value=default_time, key="custom_time")
-            selected_time = custom_time.strftime("%H:%M")
-        else:
-            selected_time = default_time.strftime("%H:%M")
-
-        notes = st.text_area(
-            "Additional Notes (Optional)", 
-            placeholder="e.g., Give with food, Check for side effects",
-            value=get_form_data('notes', ''),
-            key="notes_input"
-        )
-        
-        st.info(f"📅 Reminder Frequency: **Monthly** \t\t 🕛 Reminder time: **{selected_time}**")
-        
-        # Save form data and generate button
-        if st.button("🔄 Submit", type="primary", key="submit_btn"):
-            if pet_name and product_name:
-                # Save form data to session state
-                save_form_data(pet_name, product_name, start_date, dosage, selected_time, notes)
-                
-                with st.spinner("Submitting ...."):
-                    success = generate_content(pet_name, product_name, start_date, dosage, selected_time, notes)
-                    if success:
-                        st.success("✅ Calendar reminder generated successfully!")
-                        st.rerun()  # Refresh to show generated content
-            else:
-                st.warning("⚠️ Please fill in Pet Name and Product Name")
-        
-        # Add a "Clear Form" button to reset everything
-        if st.button("🗑️ Clear Form", key="clear_btn"):
-            # Clear session state
-            st.session_state.form_data = {}
-            st.session_state.generated_content = None
-            st.session_state.content_generated = False
-            st.rerun()
+    # Use session state values as defaults to maintain form data
+    pet_name = st.text_input(
+        "Pet Name", 
+        placeholder="e.g., Daisy, Luna, Charlie",
+        value=get_form_data('pet_name', ''),
+        key="pet_name_input"
+    )
     
-    with col2:
-        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
-        # Display generated content if available
-        if st.session_state.content_generated and st.session_state.generated_content:
-            display_generated_content()    
+    products = [
+        "NexGard",
+        "NexGard SPECTRA",
+        "NexGard COMBO",
+    ]
+    
+    saved_product = get_form_data('product_name', products[0])
+    product_index = 0
+    if saved_product in products:
+        product_index = products.index(saved_product)
+    
+    product_name = st.selectbox(
+        "BI Pet Product", 
+        products, 
+        index=product_index,
+        key="product_select"
+    )
+    
+    # Date Range Selection
+    st.markdown("**📅 Reminder Period**")
+    col_start, col_end = st.columns(2)
+    
+    with col_start:
+        start_date = st.date_input(
+            "Start Date",
+            value=get_form_data('start_date', date.today()),
+            min_value=date.today(),
+            help="First day of reminders",
+            key="start_date_input"
+        )
+
+    with col_end:
+        dosage = st.number_input(
+            "Number of Dosages",
+            value = get_form_data('dosage', 12),
+            min_value = 12,
+            help = "Number of Capsules you have",
+            key="number_of_dosage"
+        )
+    
+    # Multiple Times Per Day with Duration Limits
+    st.markdown("**⏰ Reminder Time (Optional)**")
+    
+    # Get saved selected times or use empty list
+    saved_times = get_form_data('selected_time', [])
+    
+    # Option for custom time with validation
+    custom_time_data = saved_times[0] if saved_times else None
+    custom_checked = custom_time_data is not None
+
+    use_custom_time = st.checkbox("🕐 Custom Time", key="custom", value=custom_checked)
+
+    default_time = default_time = datetime.strptime("12:00", "%H:%M").time()
+
+    # Determine the reminder time
+    if use_custom_time:
+        custom_time = st.time_input("Select custom time", value=default_time, key="custom_time")
+        selected_time = custom_time.strftime("%H:%M")
+    else:
+        selected_time = default_time.strftime("%H:%M")
+
+    notes = st.text_area(
+        "Additional Notes (Optional)", 
+        placeholder="e.g., Give with food, Check for side effects",
+        value=get_form_data('notes', ''),
+        key="notes_input"
+    )
+    
+    st.info(f"📅 Reminder Frequency: **Monthly** \t\t 🕛 Reminder time: **{selected_time}**")
+    
+    # Save form data and generate button
+    if st.button("🔄 Submit", type="primary", key="submit_btn"):
+        if pet_name and product_name:
+            # Save form data to session state
+            save_form_data(pet_name, product_name, start_date, dosage, selected_time, notes)
+            
+            with st.spinner("Submitting ...."):
+                success = generate_content(pet_name, product_name, start_date, dosage, selected_time, notes)
+                if success:
+                    st.success("✅ Calendar reminder generated successfully!")
+                    st.rerun()  # Refresh to show generated content
         else:
-            st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
+            st.warning("⚠️ Please fill in Pet Name and Product Name")
+    
+    # Add a "Clear Form" button to reset everything
+    if st.button("🗑️ Clear Form", key="clear_btn"):
+        # Clear session state
+        st.session_state.form_data = {}
+        st.session_state.generated_content = None
+        st.session_state.content_generated = False
+        st.rerun()
+    
 	    
 if __name__ == "__main__":
     main()
