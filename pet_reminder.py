@@ -1827,8 +1827,6 @@ def main():
                 key="number_of_dosage"
             )
         
-        st.markdown("Reminder Frequency: **Monthly**")
-        
         # Multiple Times Per Day with Duration Limits
         st.markdown("**⏰ Reminder Time (Optional)**")
         
@@ -1857,7 +1855,7 @@ def main():
             key="notes_input"
         )
         
-        st.info(f"📅 Selected times: {selected_time}")
+        st.info(f"📅 Reminder Frequency: **Monthly** \t\t 🕛 Reminder time: **{selected_time}**")
         
         # Save form data and generate button
         if st.button("🔄 Generate QR Reminder Card", type="primary", key="generate_btn"):
