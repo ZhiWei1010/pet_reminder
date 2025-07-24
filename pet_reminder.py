@@ -936,7 +936,8 @@ def generate_content(pet_name, product_name, start_date, dosage, selected_time, 
             'reminder_image_url': reminder_image_url,
             'reminder_details': reminder_details,
             'pet_name': pet_name,
-            'product_name': product_name
+            'product_name': product_name,
+            'html_content': html_content
         }
         st.session_state.content_generated = True
         return True
@@ -1088,15 +1089,40 @@ def main():
     
     # Save form data and generate button
     if st.button("🔄 Submit", type="primary", key="submit_btn"):
-        if pet_name and product_name:
+        if pet_name:
             # Save form data to session state
             save_form_data(pet_name, product_name, start_date, dosage, selected_time, notes)
             
             with st.spinner("Submitting ...."):
                 success = generate_content(pet_name, product_name, start_date, dosage, selected_time, notes)
                 if success:
-                    st.success("✅ Calendar reminder generated successfully!")
-                    st.rerun()  # Refresh to show generated content
+                    st.success("✅ Calendar reminder generated successfully!  \n🔀 **Redirecting to Validation Page...**")
+                    web_page_url = st.session_state.generated_content.get("web_page_url")
+                    st.markdown(f"""
+                        <meta http-equiv="refresh" content="2;url={web_page_url}">
+                            """,  
+                            unsafe_allow_html=True)
+                    
+                    # Method 2: Show a redirection html block
+                    
+                    # st.markdown(f"""
+                    #     <meta http-equiv="refresh" content="2;url={web_page_url}">
+                    #     <div style="text-align:center; padding: 50px; background-color: #f0f8f0; border-radius: 10px; margin: 20px 0;">
+                    #         <h2 style="color: #28a745;"> Redirecting to validation page... </h2>
+                    #         <div style="margin: 30px 0;">
+                    #             <div style="display: inline-block; width: 30px; height: 30px; border: 3px solid #28a745; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    #         </div>
+                    #         <style>
+                    #             @keyframes spin {{
+                    #                 0% {{ transofrm: roatate(0deg); }}
+                    #                 100% {{ ransform: rotate(360deg); }}
+                    #             }}
+                    #         </style>
+                    #         """,  
+                    #         unsafe_allow_html=True)
+                    # st.session_state['redirect'] = True
+                    
+                    st.rerun()
         else:
             st.warning("⚠️ Please fill in Pet Name")
     
