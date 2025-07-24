@@ -16,7 +16,7 @@ import uuid
 
 # Configure page with mobile optimization
 st.set_page_config(
-    page_title="Pet Reminder",
+    page_title="Pet Reminder - NexGard SPECTRA",
     page_icon="🐾",
     layout="centered"
 )
@@ -1003,7 +1003,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <img src="{logo_data_url}" style='width: 80px; height: 80px; object-fit: contain; margin-right: 20px;'>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333; font-size: 15px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;'>🐾 Pet Reminder 🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333; font-size: 15px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;'>🐾 Pet Reminder - NexGard SPECTRA 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -1013,7 +1013,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <div style='width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 10px; font-size: 35px; margin-right: 20px;'>🐾</div>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder 🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder - NexGard SPECTRA 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -1031,24 +1031,8 @@ def main():
         value=get_form_data('pet_name', ''),
         key="pet_name_input"
     )
-    
-    products = [
-        "NexGard",
-        "NexGard SPECTRA",
-        "NexGard COMBO",
-    ]
-    
-    saved_product = get_form_data('product_name', products[0])
-    product_index = 0
-    if saved_product in products:
-        product_index = products.index(saved_product)
-    
-    product_name = st.selectbox(
-        "BI Pet Product", 
-        products, 
-        index=product_index,
-        key="product_select"
-    )
+
+    product_name = "NexGard SPECTRA"
     
     # Date Range Selection
     st.markdown("**📅 Reminder Period**")
@@ -1114,7 +1098,7 @@ def main():
                     st.success("✅ Calendar reminder generated successfully!")
                     st.rerun()  # Refresh to show generated content
         else:
-            st.warning("⚠️ Please fill in Pet Name and Product Name")
+            st.warning("⚠️ Please fill in Pet Name")
     
     # Add a "Clear Form" button to reset everything
     if st.button("🗑️ Clear Form", key="clear_btn"):
