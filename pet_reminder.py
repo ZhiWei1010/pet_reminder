@@ -1,6 +1,6 @@
 import streamlit as st
 import qrcode
-from icalendar import Calendar, Event, Alarm
+from icalendar import Calendar, Event, Alarm, vDate
 from datetime import datetime, timedelta, date, time
 import io
 import base64
@@ -230,13 +230,18 @@ def create_calendar_reminder(pet_name, product_name, dosage, reminder_time, star
     event_title = f"{pet_name} - {product_name}"
     
     event.add('summary', event_title)
-    event.add('description', f"Nexgard reminder: {product_name}\nPet: {pet_name}\nTime: {reminder_time}\n{notes}")
+    if reminder_time == '':
+        event.add('description', f"NexGard reminver: {product_name}\nPet: {pet_name}\n{notes}")
+    else:
+        event.add('description', f"Nexgard reminder: {product_name}\nPet: {pet_name}\nTime: {reminder_time}\n{notes}")
     
-    # Calculate start time using the provided start_date
-    start_time = datetime.combine(start_date, datetime.strptime(reminder_time, "%H:%M").time())
-    
-    event.add('dtstart', start_time)
-    event.add('dtend', start_time + timedelta(hours=1))
+    if reminder_time == '':
+        event.add('dtstart', vDate(start_date))
+        event.add('dtend', vDate(start_date + timedelta(days=1)))
+    else:
+        start_time = datetime.combine(start_date, datetime.strptime(reminder_time, "%H:%M").time())
+        event.add('dtstart', start_time)
+        event.add('dtend', start_time + timedelta(hours=1))
     event.add('dtstamp', datetime.now())
     event.add('uid', str(uuid.uuid4()))
     
@@ -313,8 +318,9 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
     
     # Format reminder times for display
     times_html_list = ""
-    times_html_list += f"• {reminder_details['times']}<br>"
-    times_html_list = times_html_list.rstrip('<br>')
+    if reminder_details['times'] != '':
+        times_html_list += f"• {reminder_details['times']}<br>"
+        times_html_list = times_html_list.rstrip('<br>')
     
     html_content = f"""
 <!DOCTYPE html>
@@ -578,13 +584,14 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
                 <span class="detail-label">Total Reminders:</span>
                 <span class="detail-value">{reminder_details['total_reminders']}</span>
             </div>
-            
-            <div class="times-section">
+            {f"""<div class="times-section">
                 <div class="times-title">⏰ Reminder Times:</div>
                 <div class="times-list">
                     {times_html_list}
                 </div>
             </div>
+            """ if times_html_list != "" else ""}
+            
             
             {f'''
             <div class="notes-section">
@@ -1076,7 +1083,8 @@ def main():
         custom_time = st.time_input("Select custom time", value=default_time, key="custom_time")
         selected_time = custom_time.strftime("%H:%M")
     else:
-        selected_time = default_time.strftime("%H:%M")
+        # selected_time = default_time.strftime("%H:%M")
+        selected_time = ''
 
     notes = st.text_area(
         "Additional Notes (Optional)", 
@@ -1085,7 +1093,10 @@ def main():
         key="notes_input"
     )
     
-    st.info(f"📅 Reminder Frequency: **Monthly** \t\t 🕛 Reminder time: **{selected_time}**")
+    if selected_time == '':
+        st.info(f"📅 Reminder Frequency: **Monthly**")
+    else:
+        st.info(f"📅 Reminder Frequency: **Monthly** \t\t 🕛 Reminder time: **{selected_time}**")
     
     # Save form data and generate button
     if st.button("🔄 Submit", type="primary", key="submit_btn"):
