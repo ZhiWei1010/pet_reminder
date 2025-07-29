@@ -886,7 +886,7 @@ def generate_content(pet_name, product_name, start_date, dosage, selected_time, 
     """Generate all content and save to session state"""
     try:
         # Calculate reminder count
-        duration_text = format_duration_text(start_date, dosage=12)
+        duration_text = format_duration_text(start_date, dosage)
         
         calendar_data = create_calendar_reminder(
             pet_name=pet_name,
