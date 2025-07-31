@@ -1,7 +1,7 @@
 import streamlit as st
 import qrcode
 from icalendar import Calendar, Event, Alarm
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 import io
 import base64
 from PIL import Image, ImageDraw, ImageFont
@@ -11,18 +11,14 @@ import urllib.parse
 import hashlib
 import boto3
 import math
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.image import MIMEImage
 import re
 import uuid
 
 # Configure page with mobile optimization
 st.set_page_config(
-    page_title="Pet Reminder",
+    page_title="Pet Reminder - NexGard SPECTRA",
     page_icon="🐾",
-    layout="wide"
+    layout="centered"
 )
 
 # AWS Configuration - Use Streamlit secrets for cloud deployment
@@ -33,23 +29,12 @@ if "AWS_REGION" in st.secrets:
     aws_access_key_id = st.secrets["AWS_ACCESS_KEY_ID"]
     aws_secret_access_key = st.secrets["AWS_SECRET_ACCESS_KEY"]
     
-    # Email Configuration from secrets
-    SMTP_SERVER = st.secrets.get("SMTP_SERVER", "smtp.gmail.com")
-    SMTP_PORT = int(st.secrets.get("SMTP_PORT", "587"))
-    EMAIL_USER = st.secrets.get("EMAIL_USER", "")
-    EMAIL_PASSWORD = st.secrets.get("EMAIL_PASSWORD", "")
 else:
     # Development: Use environment variables
     AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
     S3_BUCKET = os.getenv('S3_BUCKET_NAME', 'pet-reminder')
     aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-    
-    # Email Configuration
-    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-    SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
-    EMAIL_USER = os.getenv('EMAIL_USER', '')
-    EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', '')
 
 # Initialize AWS client
 try:
@@ -85,11 +70,6 @@ def init_session_state():
     if 'content_generated' not in st.session_state:
         st.session_state.content_generated = False
 
-def validate_email(email):
-    """Validate email format"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
-
 def generate_qr_svg(web_page_url):
     """Generate QR code as SVG string for HTML embedding"""
     import qrcode.image.svg
@@ -116,565 +96,14 @@ def generate_qr_svg(web_page_url):
     
     return svg_string
 
-def send_email_with_attachment(recipient_email, pet_name, product_name, reminder_image_bytes, calendar_data, reminder_details):
-    try:
-        if not EMAIL_USER or not EMAIL_PASSWORD:
-            return False, "Email configuration not set. Please configure SMTP settings."
-        
-        # Get the web page URL and QR code from session state
-        web_page_url = st.session_state.generated_content.get('web_page_url') if st.session_state.generated_content else None
-        qr_image_bytes = st.session_state.generated_content.get('qr_image_bytes') if st.session_state.generated_content else None
-        
-        if not web_page_url:
-            # Fallback URL if web page not available
-            web_page_url = f"https://example.com/reminder/{pet_name}_{product_name}"
-        
-        # Create message with related multipart for embedded images
-        msg = MIMEMultipart('related')
-        msg['From'] = EMAIL_USER
-        msg['To'] = recipient_email
-        msg['Subject'] = f"🐾 Pet QR Reminder Card - {pet_name} ({product_name}) 🐾"
-        
-        # Generate unique CIDs for embedded images
-        qr_cid = f"qr_code_{uuid.uuid4().hex}"
-        logo_cid = f"logo_{uuid.uuid4().hex}"
-        
-        # Load BI Logo for embedding
-        logo_image_bytes = None
-        if os.path.exists("BI-Logo-2.png"):
-            try:
-                with open("BI-Logo-2.png", "rb") as f:
-                    logo_image_bytes = f.read()
-            except Exception as e:
-                print(f"Error loading BI-Logo-2.png: {e}")
-        elif os.path.exists("BI-Logo.png"):
-            try:
-                with open("BI-Logo.png", "rb") as f:
-                    logo_image_bytes = f.read()
-            except Exception as e:
-                print(f"Error loading BI-Logo.png: {e}")
-        
-        # Gmail Mobile Optimized HTML - Simplified layout with tables
-        html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        /* Reset styles for Gmail */
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-        
-        /* Main container - Use table for Gmail compatibility */
-        .email-wrapper {{
-            width: 100% !important;
-            background-color: #f5f5f5;
-            font-family: Arial, sans-serif;
-            line-height: 1.4;
-        }}
-        
-        .email-container {{
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-        }}
-        
-        /* Header styles */
-        .header {{
-            background-color: #08312a;
-            padding: 20px;
-            text-align: center;
-        }}
-        
-        .header-content {{
-            display: table;
-            width: 100%;
-            margin: 0 auto;
-        }}
-        
-        .logo-section {{
-            display: table-cell;
-            vertical-align: middle;
-            width: 80px;
-            text-align: left;
-        }}
-        
-        .logo-img {{
-            width: 60px;
-            height: 60px;
-            object-fit: contain;
-            display: block;
-        }}
-        
-        .title-section {{
-            display: table-cell;
-            vertical-align: middle;
-            text-align: center;
-        }}
-        
-        .header h1 {{
-            color: #00e47c;
-            font-size: 24px;
-            margin: 5px 0;
-            font-weight: bold;
-        }}
-        
-        .header p {{
-            color: #ffffff;
-            font-size: 16px;
-            margin: 0;
-        }}
-        
-        /* QR Code section - Simplified for mobile */
-        .qr-section {{
-            background-color: #f8f9fa;
-            padding: 20px;
-            text-align: center;
-            border: 3px solid #00e47c;
-        }}
-        
-        .qr-title {{
-            color: #08312a;
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 15px;
-        }}
-        
-        .qr-image {{
-            width: 200px;
-            height: 200px;
-            margin: 10px auto;
-            background-color: #ffffff;
-            border: 2px solid #00e47c;
-            padding: 10px;
-            display: block;
-        }}
-        
-        .qr-instructions {{
-            color: #08312a;
-            font-size: 16px;
-            font-weight: bold;
-            margin: 15px 0 10px 0;
-        }}
-        
-        .qr-link {{
-            margin: 10px 0;
-        }}
-        
-        .qr-link a {{
-            color: #007bff;
-            text-decoration: underline;
-            font-weight: bold;
-            font-size: 14px;
-        }}
-        
-        .scan-tip {{
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            padding: 10px;
-            margin: 15px 0;
-            border-radius: 5px;
-            color: #856404;
-            font-size: 13px;
-        }}
-        
-        /* Details section - Using table for better Gmail support */
-        .details-section {{
-            padding: 20px;
-            background-color: #ffffff;
-        }}
-        
-        .details-title {{
-            color: #08312a;
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #00e47c;
-            padding-bottom: 5px;
-        }}
-        
-        .details-table {{
-            width: 100%;
-            border-collapse: collapse;
-        }}
-        
-        .details-table td {{
-            padding: 8px 5px;
-            border-bottom: 1px solid #e9ecef;
-            vertical-align: top;
-        }}
-        
-        .detail-label {{
-            color: #08312a;
-            font-weight: bold;
-            width: 40%;
-            font-size: 14px;
-        }}
-        
-        .detail-value {{
-            color: #333333;
-            width: 60%;
-            font-size: 14px;
-        }}
-        
-        /* Times section */
-        .times-section {{
-            background-color: #e8f5e8;
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 5px;
-        }}
-        
-        .times-title {{
-            color: #08312a;
-            font-weight: bold;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }}
-        
-        .time-item {{
-            color: #333333;
-            margin: 5px 0;
-            font-size: 14px;
-        }}
-        
-        /* Notes section */
-        .notes-section {{
-            background-color: #fff3cd;
-            padding: 15px;
-            margin: 15px 0;
-            border: 1px solid #ffeaa7;
-            border-radius: 5px;
-        }}
-        
-        .notes-title {{
-            color: #856404;
-            font-weight: bold;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }}
-        
-        .notes-text {{
-            color: #856404;
-            font-size: 14px;
-            line-height: 1.4;
-        }}
-        
-        /* Instructions section */
-        .instructions {{
-            background-color: #e3f2fd;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 4px solid #2196f3;
-        }}
-        
-        .instructions-title {{
-            color: #1976d2;
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }}
-        
-        .instruction-text {{
-            color: #1976d2;
-            font-size: 14px;
-            line-height: 1.4;
-        }}
-        
-        /* Attachment note */
-        .attachment-note {{
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
-            border-radius: 5px;
-        }}
-        
-        .attachment-note strong {{
-            color: #0c5460;
-            font-size: 14px;
-        }}
-        
-        /* Footer */
-        .footer {{
-            background-color: #08312a;
-            color: #ffffff;
-            text-align: center;
-            padding: 20px;
-            font-size: 12px;
-        }}
-        
-        /* Mobile specific - Gmail Mobile overrides */
-        @media only screen and (max-width: 480px) {{
-            .email-container {{
-                width: 100% !important;
-            }}
-            
-            .header-content {{
-                display: block !important;
-            }}
-            
-            .logo-section,
-            .title-section {{
-                display: block !important;
-                width: 100% !important;
-                text-align: center !important;
-            }}
-            
-            .logo-section {{
-                margin-bottom: 10px;
-            }}
-            
-            .logo-img {{
-                margin: 0 auto !important;
-            }}
-            
-            .header h1 {{
-                font-size: 20px !important;
-            }}
-            
-            .header p {{
-                font-size: 14px !important;
-            }}
-            
-            .qr-title {{
-                font-size: 18px !important;
-            }}
-            
-            .qr-image {{
-                width: 150px !important;
-                height: 150px !important;
-            }}
-            
-            .qr-instructions {{
-                font-size: 14px !important;
-            }}
-            
-            .details-title {{
-                font-size: 16px !important;
-            }}
-            
-            .detail-label,
-            .detail-value {{
-                font-size: 13px !important;
-            }}
-            
-            .times-title,
-            .notes-title {{
-                font-size: 14px !important;
-            }}
-            
-            .time-item,
-            .notes-text {{
-                font-size: 13px !important;
-            }}
-        }}
-        
-        /* Force Gmail to respect our styles */
-        .gmail-fix {{
-            min-width: 1px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="email-wrapper">
-        <table class="email-container" cellpadding="0" cellspacing="0" border="0">
-            <tr>
-                <td>
-                    <!-- Header -->
-                    <div class="header">
-                        <div class="header-content">
-                            <div class="title-section">
-                                <h1>🐾 Pet QR Reminder Card 🐾</h1>
-                                <p>Schedule for <strong>{pet_name} ({product_name})</strong></p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- QR Code Section -->
-                    <div class="qr-section">
-                        <div class="qr-title">📱 Scan QR Code</div>
-                        
-                        {f'''
-                        <div style="text-align: center; margin: 15px 0;">
-                            <img src="cid:{qr_cid}" 
-                                 alt="QR Code for Pet Reminder" 
-                                 class="qr-image"
-                                 style="width: 200px; height: 200px; display: block; margin: 0 auto; border: 2px solid #00e47c; padding: 10px; background-color: white;" />
-                        </div>
-                        ''' if qr_image_bytes else '''
-                        <div style="text-align: center; margin: 15px 0;">
-                            <div style="width: 200px; height: 200px; background: #f0f0f0; display: inline-block; border: 2px solid #00e47c; padding: 10px; color: #666; line-height: 180px; font-size: 14px;">QR Code Not Available</div>
-                        </div>
-                        '''}
-                        
-                        
-                        
-                        <div class="qr-link">
-                            Can't scan? <a href="{web_page_url}">Click here instead</a>
-                        </div>
-                        
-                        
-                    </div>
-                    
-                    <!-- Details Section -->
-                    <div class="details-section">
-                        <div class="details-title">📋 Reminder Details</div>
-                        
-                        <table class="details-table">
-                            <tr>
-                                <td class="detail-label">Pet Name:</td>
-                                <td class="detail-value">{pet_name}</td>
-                            </tr>
-                            <tr>
-                                <td class="detail-label">BI Product:</td>
-                                <td class="detail-value">{product_name}</td>
-                            </tr>
-                            <tr>
-                                <td class="detail-label">Start Date:</td>
-                                <td class="detail-value">{reminder_details['start_date']}</td>
-                            </tr>
-                            <tr>
-                                <td class="detail-label">End Date:</td>
-                                <td class="detail-value">{reminder_details['end_date']}</td>
-                            </tr>
-                            <tr>
-                                <td class="detail-label">Frequency:</td>
-                                <td class="detail-value">{reminder_details['frequency']}</td>
-                            </tr>
-                            <tr>
-                                <td class="detail-label">Duration:</td>
-                                <td class="detail-value">{reminder_details['duration']}</td>
-                            </tr>
-                            <tr>
-                                <td class="detail-label">Total Reminders:</td>
-                                <td class="detail-value">{reminder_details['total_reminders']}</td>
-                            </tr>
-                        </table>
-                        
-                        <div class="times-section">
-                            <div class="times-title">⏰ Reminder Times:</div>
-                            {"".join([f'<div class="time-item">• {time_info["time"]} - {time_info["label"]}</div>' for time_info in reminder_details['times']])}
-                        </div>
-                        
-                        {f'''
-                        <div class="notes-section">
-                            <div class="notes-title">📝 Additional Notes:</div>
-                            <div class="notes-text">{reminder_details['notes']}</div>
-                        </div>
-                        ''' if reminder_details.get('notes') and reminder_details['notes'].strip() else ''}
-                    </div>
-                    
-                    
-                </td>
-            </tr>
-        </table>
-    </div>
-</body>
-</html>
-        """
-        
-        # Create plain text version (important for Gmail)
-        text_body = f"""
-🐾 Pet Reminder Card - {pet_name} ({product_name})
-
-🔗 Reminder Link: {web_page_url}
-
-📋 Reminder Details:
-• Pet Name: {pet_name}
-• Product: {product_name}
-• Start Date: {reminder_details['start_date']}
-• End Date: {reminder_details['end_date']}
-• Frequency: {reminder_details['frequency']}
-• Duration: {reminder_details['duration']}
-• Total Reminders: {reminder_details['total_reminders']}
-
-⏰ Reminder Times:
-"""
-        for time_info in reminder_details['times']:
-            text_body += f"• {time_info['time']} - {time_info['label']}\n"
-        
-        if reminder_details.get('notes'):
-            text_body += f"\n📝 Additional Notes:\n{reminder_details['notes']}\n"
-        
-        text_body += """
-📱 How to use:
-1. Click the reminder link above to access the QR code page
-2. Scan the QR code with your phone camera
-3. Download the attached reminder card and calendar file
-4. Add the calendar file (.ics) to your calendar app
-
-📎 Attachments:
-• Full Reminder Card (PNG image)
-• Calendar File (.ics)
-
-Best regards,
-Pet Reminder System
-        """
-        
-        # Create multipart structure
-        msg_alternative = MIMEMultipart('alternative')
-        
-        part_text = MIMEText(text_body, 'plain')
-        part_html = MIMEText(html_body, 'html')
-        
-        msg_alternative.attach(part_text)
-        msg_alternative.attach(part_html)
-        msg.attach(msg_alternative)
-        
-        # Embed QR code as related attachment (CID) - Gmail compatible
-        if qr_image_bytes:
-            qr_embedded = MIMEImage(qr_image_bytes)
-            qr_embedded.add_header('Content-ID', f'<{qr_cid}>')
-            qr_embedded.add_header('Content-Disposition', 'inline', filename=f"{pet_name}_qr_code.png")
-            msg.attach(qr_embedded)
-        
-        # Embed BI Logo as related attachment (CID) - Gmail compatible
-        #if logo_image_bytes:
-            #logo_embedded = MIMEImage(logo_image_bytes)
-            #logo_embedded.add_header('Content-ID', f'<{logo_cid}>')
-            #logo_embedded.add_header('Content-Disposition', 'inline', filename="bi_logo.png")
-            #msg.attach(logo_embedded)
-        
-        # Attach the full reminder card image as attachment
-        reminder_card_attachment = MIMEImage(reminder_image_bytes)
-        reminder_card_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_reminder_card.png"')
-        msg.attach(reminder_card_attachment)
-        
-        # Attach calendar file
-        calendar_attachment = MIMEText(calendar_data, 'calendar')
-        calendar_attachment.add_header('Content-Disposition', f'attachment; filename="{pet_name}_{product_name}_calendar.ics"')
-        msg.attach(calendar_attachment)
-        
-        # Send email
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
-        text = msg.as_string()
-        server.sendmail(EMAIL_USER, recipient_email, text)
-        server.quit()
-        
-        return True, "Email sent successfully!"
-        
-    except Exception as e:
-        return False, f"Failed to send email: {str(e)}"
-
-def save_form_data(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes):
+def save_form_data(pet_name, product_name, start_date, dosage, selected_time, notes):
     """Save current form data to session state"""
     st.session_state.form_data = {
         'pet_name': pet_name,
         'product_name': product_name,
         'start_date': start_date,
-        'end_date': end_date,
-        'frequency': frequency,
-        'frequency_value': frequency_value,
-        'selected_times': selected_times,
+        'dosage': dosage,
+        'selected_time': selected_time,
         'notes': notes
     }
 
@@ -682,32 +111,9 @@ def get_form_data(key, default=None):
     """Get form data from session state"""
     return st.session_state.form_data.get(key, default)
 
-def calculate_reminder_count(start_date, end_date, frequency, frequency_value=None):
-    """Calculate total number of reminders based on date range and frequency"""
-    if end_date < start_date:
-        return 0
-    
-    total_days = (end_date - start_date).days + 1  # Include both start and end dates
-    
-    if frequency == "Daily":
-        return total_days
-    elif frequency == "Weekly":
-        return math.ceil(total_days / 7)
-    elif frequency == "Monthly":
-        # Calculate months between dates
-        months = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
-        # Add 1 if we haven't passed the start day in the end month
-        if end_date.day >= start_date.day:
-            months += 1
-        return max(1, months)
-    elif frequency == "Custom Days" and frequency_value:
-        return math.ceil(total_days / frequency_value)
-    
-    return 0
-
-def format_duration_text(start_date, end_date, reminder_count, frequency):
+def format_duration_text(start_date, dosage):
     """Format duration text for display"""
-    total_days = (end_date - start_date).days + 1
+    total_days = dosage * 30
     
     if total_days <= 7:
         return f"{total_days} day{'s' if total_days > 1 else ''}"
@@ -807,10 +213,10 @@ def generate_meaningful_id(pet_name, product_name):
     
     return meaningful_id
 
-def create_calendar_reminder(pet_name, product_name, frequency, frequency_value, reminder_times, start_date, end_date, notes=""):
+def create_calendar_reminder(pet_name, product_name, dosage, reminder_time, start_date, notes=""):
     
     # Calculate reminder count for RRULE
-    reminder_count = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
+    reminder_count = dosage
     
     # Create calendar
     cal = Calendar()
@@ -818,54 +224,38 @@ def create_calendar_reminder(pet_name, product_name, frequency, frequency_value,
     cal.add('version', '2.0')
     cal.add('calscale', 'GREGORIAN')
     cal.add('method', 'PUBLISH')
+
+    # Create event
+    event = Event()
+    event_title = f"{pet_name} - {product_name}"
     
-    # Create separate events for each time of day
-    for i, time_info in enumerate(reminder_times):
-        time_str = time_info['time']
-        time_label = time_info['label']
-        
-        # Create event
-        event = Event()
-        event_title = f"{pet_name} - {product_name}"
-        if len(reminder_times) > 1:
-            event_title += f" ({time_label})"
-        
-        event.add('summary', event_title)
-        event.add('description', f"Medication reminder: {product_name}\nPet: {pet_name}\nTime: {time_label}\n{notes}")
-        
-        # Calculate start time using the provided start_date
-        start_time = datetime.combine(start_date, datetime.strptime(time_str, "%H:%M").time())
-        
-        event.add('dtstart', start_time)
-        event.add('dtend', start_time + timedelta(hours=1))
-        event.add('dtstamp', datetime.now())
-        event.add('uid', str(uuid.uuid4()))
-        
-        # Add recurrence rule with count limit
-        rrule = {}
-        
-        if frequency == "Daily":
-            rrule['freq'] = 'daily'
-        elif frequency == "Weekly":
-            rrule['freq'] = 'weekly'
-        elif frequency == "Monthly":
-            rrule['freq'] = 'monthly'
-        elif frequency == "Custom Days":
-            rrule['freq'] = 'daily'
-            rrule['interval'] = int(frequency_value)
-        
-        if reminder_count > 0:
-            rrule['count'] = reminder_count
-        
-        event.add('rrule', rrule)
-        
-        alarm = Alarm()
-        alarm.add('action', 'DISPLAY')
-        alarm.add('description', f'Time to give {product_name} to {pet_name}! ({time_label})')
-        alarm.add('trigger', timedelta(minutes=-15))  # 15 minutes before
-        event.add_component(alarm)
-        
-        cal.add_component(event)
+    event.add('summary', event_title)
+    event.add('description', f"Nexgard reminder: {product_name}\nPet: {pet_name}\nTime: {reminder_time}\n{notes}")
+    
+    # Calculate start time using the provided start_date
+    start_time = datetime.combine(start_date, datetime.strptime(reminder_time, "%H:%M").time())
+    
+    event.add('dtstart', start_time)
+    event.add('dtend', start_time + timedelta(hours=1))
+    event.add('dtstamp', datetime.now())
+    event.add('uid', str(uuid.uuid4()))
+    
+    # Add recurrence rule with count limit
+    rrule = {}
+    rrule['freq'] = 'monthly'
+    
+    if reminder_count > 0:
+        rrule['count'] = reminder_count
+    
+    event.add('rrule', rrule)
+    
+    alarm = Alarm()
+    alarm.add('action', 'DISPLAY')
+    alarm.add('description', f'Time to give {product_name} to {pet_name}!')
+    alarm.add('trigger', timedelta(minutes=-15))  # 15 minutes before
+    event.add_component(alarm)
+    
+    cal.add_component(event)
     
     return cal.to_ical().decode('utf-8')
 
@@ -923,8 +313,7 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
     
     # Format reminder times for display
     times_html_list = ""
-    for t in reminder_details['times']:
-        times_html_list += f"• {t['time']} - {t['label']}<br>"
+    times_html_list += f"• {reminder_details['times']}<br>"
     times_html_list = times_html_list.rstrip('<br>')
     
     html_content = f"""
@@ -1182,10 +571,6 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
                 <span class="detail-value">{reminder_details['start_date']}</span>
             </div>
             <div class="detail-row">
-                <span class="detail-label">End Date:</span>
-                <span class="detail-value">{reminder_details['end_date']}</span>
-            </div>
-            <div class="detail-row">
                 <span class="detail-label">Duration:</span>
                 <span class="detail-value">{reminder_details['duration']}</span>
             </div>
@@ -1406,15 +791,11 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     # Format frequency better
     frequency_text = reminder_details['frequency']
-    if reminder_details['frequency'] == 'Custom Days':
-        frequency_text = f"Every {reminder_details.get('frequency_value', 'X')} days"
-    
-    
+
     details = [
         f" ",
         f"• Frequency: {frequency_text}",
         f"• Starts: {reminder_details['start_date']}",
-        f"• Ends: {reminder_details['end_date']}",
         f"• Duration: {reminder_details['duration']}",
         f"• Total: {reminder_details['total_reminders']} reminders",
         f" "
@@ -1425,9 +806,9 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     # Times section (tighter spacing) - REPLACE ICON WITH TEXT
     times_y = details_y + len(details) * 25 + 15  # Reduced spacing
-    draw.text((left_x, times_y), "Reminder Timings:", fill=accent_color, font=detail_font)
+    draw.text((left_x, times_y), "Reminder Time:", fill=accent_color, font=detail_font)
     
-    times_text = " / ".join([f"{t['time']} ({t['label']})" for t in reminder_details['times']])
+    times_text = reminder_details['times']
     draw.text((left_x + 20, times_y + 30), f"{times_text}", fill=text_color, font=small_font)
     
     # Notes if present (tighter spacing) - REPLACE ICON WITH TEXT
@@ -1494,21 +875,18 @@ def create_reminder_image(pet_name, product_name, reminder_details, qr_code_byte
     
     return img
 
-def generate_content(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes):
+def generate_content(pet_name, product_name, start_date, dosage, selected_time, notes):
     """Generate all content and save to session state"""
     try:
         # Calculate reminder count
-        total_reminders = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
-        duration_text = format_duration_text(start_date, end_date, total_reminders, frequency)
+        duration_text = format_duration_text(start_date, dosage=12)
         
         calendar_data = create_calendar_reminder(
             pet_name=pet_name,
             product_name=product_name,
-            frequency=frequency,
-            frequency_value=frequency_value,
-            reminder_times=selected_times,
+            dosage=dosage,
+            reminder_time=selected_time,
             start_date=start_date,
-            end_date=end_date,
             notes=notes
         )
         
@@ -1518,13 +896,11 @@ def generate_content(pet_name, product_name, start_date, end_date, frequency, fr
         calendar_url = upload_to_s3(calendar_data, meaningful_id)
         
         reminder_details = {
-            'frequency': frequency,
-            'frequency_value': frequency_value,
+            'frequency': 'Monthly',
             'start_date': start_date.strftime('%Y-%m-%d'),
-            'end_date': end_date.strftime('%Y-%m-%d'),
             'duration': duration_text,
-            'total_reminders': total_reminders,
-            'times': selected_times,
+            'total_reminders': dosage,
+            'times': selected_time,
             'notes': notes
         }
         
@@ -1560,7 +936,8 @@ def generate_content(pet_name, product_name, start_date, end_date, frequency, fr
             'reminder_image_url': reminder_image_url,
             'reminder_details': reminder_details,
             'pet_name': pet_name,
-            'product_name': product_name
+            'product_name': product_name,
+            'html_content': html_content
         }
         st.session_state.content_generated = True
         return True
@@ -1577,157 +954,6 @@ def display_generated_content():
     
     # Display reminder card
     st.image(content['reminder_image_bytes'], use_container_width=True)
-    
-    with st.expander("📥 Download Options"):
-        # Download reminder Card with QR code
-        st.download_button(
-            label="🖼️ Download Reminder Card (with QR Code)",
-            data=content['reminder_image_bytes'],
-            file_name=f"{content['meaningful_id']}_reminder_image.png",
-            mime="image/png",
-            key="download_reminder_card"
-        )
-        
-        st.download_button(
-            label="📥 Download QR Code Only",
-            data=content['qr_image_bytes'],
-            file_name=f"{content['meaningful_id']}_qr.png",
-            mime="image/png",
-            key="download_qr_only"
-        )
-        
-        st.download_button(
-            label="📅 Download Calendar File", 
-            data=content['calendar_data'],
-            file_name=f"{content['meaningful_id']}.ics",
-            mime="text/calendar",
-            key="download_calendar"
-        )
-    
-    with st.expander("📧 Email Reminder Card"):
-        if not EMAIL_USER or not EMAIL_PASSWORD:
-            st.warning("⚠️ Email configuration not set. Please configure SMTP settings in environment variables.")
-            st.info("""
-            **Required Environment Variables:**
-            - `EMAIL_USER`: Your email address
-            - `EMAIL_PASSWORD`: Your email app password
-            - `SMTP_SERVER`: SMTP server (default: smtp.gmail.com)
-            - `SMTP_PORT`: SMTP port (default: 587)
-            """)
-        else:
-            recipient_email = st.text_input(
-                "Recipient Email Address",
-                placeholder="example@email.com",
-                key="recipient_email"
-            )
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("📧 Send Email", type="primary", key="send_email_btn"):
-                    if recipient_email and validate_email(recipient_email):
-                        with st.spinner("Sending email..."):
-                            success, message = send_email_with_attachment(
-                                recipient_email=recipient_email,
-                                pet_name=content['pet_name'],
-                                product_name=content['product_name'],
-                                reminder_image_bytes=content['reminder_image_bytes'],
-                                calendar_data=content['calendar_data'],
-                                reminder_details=content['reminder_details']
-                            )
-                            
-                            if success:
-                                st.success(f"✅ {message}")
-                            else:
-                                st.error(f"❌ {message}")
-                    elif not recipient_email:
-                        st.warning("⚠️ Please enter recipient email address")
-                    else:
-                        st.warning("⚠️ Please enter a valid email address")
-            
-            with col2:
-                #if st.button("📧 Send to Multiple", key="send_multiple_btn"):
-                    st.text("")
-                    
-            # Multiple email addresses input
-            if st.session_state.get('send_multiple_btn', False):
-                multiple_emails = st.text_area(
-                    "Multiple Email Addresses (comma-separated)",
-                    placeholder="email1@example.com, email2@example.com, email3@example.com",
-                    key="multiple_emails"
-                )
-                
-                if st.button("📧 Send to All", type="primary", key="send_all_btn"):
-                    if multiple_emails:
-                        email_list = [email.strip() for email in multiple_emails.split(',') if email.strip()]
-                        valid_emails = [email for email in email_list if validate_email(email)]
-                        invalid_emails = [email for email in email_list if not validate_email(email)]
-                        
-                        if invalid_emails:
-                            st.warning(f"⚠️ Invalid email addresses: {', '.join(invalid_emails)}")
-                        
-                        if valid_emails:
-                            with st.spinner(f"Sending emails to {len(valid_emails)} recipients..."):
-                                sent_count = 0
-                                failed_count = 0
-                                
-                                for email in valid_emails:
-                                    success, message = send_email_with_attachment(
-                                        recipient_email=email,
-                                        pet_name=content['pet_name'],
-                                        product_name=content['product_name'],
-                                        reminder_image_bytes=content['reminder_image_bytes'],
-                                        calendar_data=content['calendar_data'],
-                                        reminder_details=content['reminder_details']
-                                    )
-                                    
-                                    if success:
-                                        sent_count += 1
-                                    else:
-                                        failed_count += 1
-                                        st.error(f"❌ Failed to send to {email}: {message}")
-                                
-                                if sent_count > 0:
-                                    st.success(f"✅ Successfully sent to {sent_count} recipients!")
-                                if failed_count > 0:
-                                    st.error(f"❌ Failed to send to {failed_count} recipients")
-                    else:
-                        st.warning("⚠️ Please enter at least one email address")
-    
-    with st.expander("🔗 URLs"):
-        if content['web_page_url']:
-            st.write(f"**QR Web Page URL:** {content['web_page_url']}")
-        else:
-            st.write("**QR Web Page URL:** ❌ S3 not configured")
-            
-        if content['calendar_url']:
-            st.write(f"**Calendar File URL:** {content['calendar_url']}")
-        else:
-            st.write("**Calendar File URL:** ❌ S3 not configured")
-            
-        if content['reminder_image_url']:
-            st.write(f"**Reminder Card URL:** {content['reminder_image_url']}")
-        elif AWS_CONFIGURED:
-            st.write("**Reminder Card URL:** ❌ Upload failed")
-        else:
-            st.write("**Reminder Card URL:** ❌ S3 not configured")
-            
-    with st.expander("📋 Reminder Summary"):
-        details = content['reminder_details']
-        st.write(f"**Pet:** {content['pet_name']}")
-        st.write(f"**Product:** {content['product_name']}")
-        st.write(f"**Start Date:** {details['start_date']}")
-        st.write(f"**End Date:** {details['end_date']}")
-        st.write(f"**Frequency:** {details['frequency']}")
-        if details.get('frequency_value'):
-            st.write(f"**Every:** {details['frequency_value']} days")
-        st.write(f"**Duration:** {details['duration']}")
-        st.write(f"**Total Reminders:** {details['total_reminders']}")
-        st.write(f"**Times per day:** {len(details['times'])}")
-        for time_info in details['times']:
-            st.write(f"  • {time_info['time']} - {time_info['label']}")
-        if details.get('notes'):
-            st.write(f"**Notes:** {details['notes']}")
 
 def main():
     # Initialize session state
@@ -1778,7 +1004,7 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <img src="{logo_data_url}" style='width: 80px; height: 80px; object-fit: contain; margin-right: 20px;'>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333; font-size: 15px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;'>🐾 Pet Reminder 🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333; font-size: 15px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;'>🐾 Pet Reminder - NexGard SPECTRA 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
@@ -1788,311 +1014,126 @@ def main():
         <div style='display: flex; align-items: center; margin-bottom: 10px; height: 90px;'>
             <div style='width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 10px; font-size: 35px; margin-right: 20px;'>🐾</div>
             <div style='flex: 1; text-align: center;'>
-                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder 🐾</h5>
+                <h5 style='margin: 0; font-weight: bold; color: #333;'>🐾 Pet Reminder - NexGard SPECTRA 🐾</h5>
             </div>
             <div style='width: 80px;'></div>
         </div>
         """, unsafe_allow_html=True)
         
     st.text("") 
-    
+
     # Main form
-    col1, spacer, col2 = st.columns([1, 0.2, 1])
+    st.markdown("<h6 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h6>", unsafe_allow_html=True)
     
-    with col1:
-        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📋 Reminder Details</h6>", unsafe_allow_html=True)
-        
-        # Use session state values as defaults to maintain form data
-        pet_name = st.text_input(
-            "Pet Name", 
-            placeholder="e.g., Daisy, Luna, Charlie",
-            value=get_form_data('pet_name', ''),
-            key="pet_name_input"
-        )
-        
-        products = [
-            "Broadline",
-            "Eurican L4",
-            "Heartgard Plus",
-            "Metacam", 
-            "NexGard",
-            "NexGard SPECTRA",
-            "NexGard COMBO",
-            "Prascend",
-            "Previcox",
-            "ProZinc",
-            "PUREVAX",
-            "Rabisin / Imrab",
-            "Rabisin / Raboral V-RG",
-            "Semintra",
-            "SENVELGO",
-            "Vetmedin",	    
-            "Other"
-        ]
-        
-        saved_product = get_form_data('product_name', products[0])
-        product_index = 0
-        if saved_product in products:
-            product_index = products.index(saved_product)
-        
-        product_name = st.selectbox(
-            "BI Pet Product", 
-            products, 
-            index=product_index,
-            key="product_select"
-        )
-        
-        if product_name == "Other":
-            product_name = st.text_input(
-                "Custom Product Name", 
-                placeholder="Enter product name",
-                value=get_form_data('custom_product', ''),
-                key="custom_product_input"
-            )
-        
-        # Date Range Selection
-        st.markdown("**📅 Reminder Period**")
-        col_start, col_end = st.columns(2)
-        
-        with col_start:
-            start_date = st.date_input(
-                "Start Date",
-                value=get_form_data('start_date', date.today()),
-                min_value=date.today(),
-                help="First day of reminders",
-                key="start_date_input"
-            )
-        
-        with col_end:
-            # Default end date to end of current year
-            current_year = date.today().year
-            default_end_date = date(current_year, 12, 31)
-            
-            end_date = st.date_input(
-                "End Date",
-                value=get_form_data('end_date', default_end_date),
-                min_value=date.today(),
-                help="Last day of reminders",
-                key="end_date_input"
-            )
-        
-        # Validate date range
-        if end_date < start_date:
-            st.error("⚠️ End date must be on or after start date")
-        
-        frequency_options = ["Daily", "Weekly", "Monthly", "Custom Days"]
-        saved_frequency = get_form_data('frequency', 'Daily')
-        frequency_index = 0
-        if saved_frequency in frequency_options:
-            frequency_index = frequency_options.index(saved_frequency)
-        
-        frequency = st.selectbox(
-            "Reminder Frequency", 
-            frequency_options, 
-            index=frequency_index,
-            key="frequency_select"
-        )
-        
-        frequency_value = None
-        if frequency == "Custom Days":
-            frequency_value = st.number_input(
-                "Every X days", 
-                min_value=1, 
-                max_value=365, 
-                value=get_form_data('frequency_value', 7),
-                key="frequency_value_input"
-            )
-        
-        # Calculate and show reminder count
-        if start_date and end_date and end_date >= start_date:
-            reminder_count = calculate_reminder_count(start_date, end_date, frequency, frequency_value)
-            duration_text = format_duration_text(start_date, end_date, reminder_count, frequency)
-            
-            if reminder_count > 0:
-                st.info(f"💡 This will create **{reminder_count} reminders** over {duration_text}")
-            else:
-                st.warning("⚠️ No reminders will be generated with these settings")
-        
-        # Multiple Times Per Day with Duration Limits
-        st.markdown("**⏰ Reminder Times**")
-        
-        # Define time periods with their valid ranges
-        time_periods = {
-            "Morning": {
-                "default": "08:00",
-                "min_hour": 5,   # 5:00 AM
-                "max_hour": 11,  # 11:59 AM
-                "options": [f"{h:02d}:{m:02d}" for h in range(5, 12) for m in [0, 15, 30, 45]]
-            },
-            "Afternoon": {
-                "default": "14:00", 
-                "min_hour": 12,  # 12:00 PM
-                "max_hour": 17,  # 5:59 PM
-                "options": [f"{h:02d}:{m:02d}" for h in range(12, 18) for m in [0, 15, 30, 45]]
-            },
-            "Evening": {
-                "default": "19:00",
-                "min_hour": 18,  # 6:00 PM
-                "max_hour": 21,  # 9:59 PM
-                "options": [f"{h:02d}:{m:02d}" for h in range(18, 22) for m in [0, 15, 30, 45]]
-            },
-            "Night": {
-                "default": "22:00",
-                "min_hour": 22,  # 10:00 PM
-                "max_hour": 4,   # 4:59 AM (next day)
-                "options": [f"{h:02d}:{m:02d}" for h in range(22, 24) for m in [0, 15, 30, 45]] + 
-                          [f"{h:02d}:{m:02d}" for h in range(0, 5) for m in [0, 15, 30, 45]]
-            }
-        }
-        
-        # Get saved selected times or use empty list
-        saved_times = get_form_data('selected_times', [])
-        saved_time_periods = [t['label'] for t in saved_times] if saved_times else []
-        
-        # Let user select which times they want
-        selected_times = []
-        
-        col_time1, col_time2 = st.columns(2)
-        
-        with col_time1:
-            morning_checked = "Morning" in saved_time_periods
-            if st.checkbox("🌅 Morning", key="morning", value=morning_checked):
-                morning_options = time_periods["Morning"]["options"]
-                # Find saved time or use default
-                saved_morning_time = next((t['time'] for t in saved_times if t['label'] == 'Morning'), time_periods["Morning"]["default"])
-                default_idx = morning_options.index(saved_morning_time) if saved_morning_time in morning_options else 0
-                morning_time = st.selectbox(
-                    "Morning time", 
-                    options=morning_options,
-                    index=default_idx,
-                    key="morning_time"
-                )
-                selected_times.append({"time": morning_time, "label": "Morning"})
-                
-            afternoon_checked = "Afternoon" in saved_time_periods
-            if st.checkbox("☀️ Afternoon", key="afternoon", value=afternoon_checked):
-                afternoon_options = time_periods["Afternoon"]["options"]
-                saved_afternoon_time = next((t['time'] for t in saved_times if t['label'] == 'Afternoon'), time_periods["Afternoon"]["default"])
-                default_idx = afternoon_options.index(saved_afternoon_time) if saved_afternoon_time in afternoon_options else 0
-                afternoon_time = st.selectbox(
-                    "Afternoon time", 
-                    options=afternoon_options,
-                    index=default_idx,
-                    key="afternoon_time"
-                )
-                selected_times.append({"time": afternoon_time, "label": "Afternoon"})
-        
-        with col_time2:
-            evening_checked = "Evening" in saved_time_periods
-            if st.checkbox("🌇 Evening", key="evening", value=evening_checked):
-                evening_options = time_periods["Evening"]["options"]
-                saved_evening_time = next((t['time'] for t in saved_times if t['label'] == 'Evening'), time_periods["Evening"]["default"])
-                default_idx = evening_options.index(saved_evening_time) if saved_evening_time in evening_options else 0
-                evening_time = st.selectbox(
-                    "Evening time", 
-                    options=evening_options,
-                    index=default_idx,
-                    key="evening_time"
-                )
-                selected_times.append({"time": evening_time, "label": "Evening"})
-                
-            night_checked = "Night" in saved_time_periods
-            if st.checkbox("🌙 Night", key="night", value=night_checked):
-                night_options = time_periods["Night"]["options"]
-                saved_night_time = next((t['time'] for t in saved_times if t['label'] == 'Night'), time_periods["Night"]["default"])
-                default_idx = night_options.index(saved_night_time) if saved_night_time in night_options else 0
-                night_time = st.selectbox(
-                    "Night time", 
-                    options=night_options,
-                    index=default_idx,
-                    key="night_time"
-                )
-                selected_times.append({"time": night_time, "label": "Night"})
-        
-        # Option for custom time with validation
-        custom_times = [t for t in saved_times if t['label'] not in ['Morning', 'Afternoon', 'Evening', 'Night']]
-        custom_checked = len(custom_times) > 0
-        
-        if st.checkbox("🕐 Custom Time", key="custom", value=custom_checked):
-            saved_custom_time = custom_times[0]['time'] if custom_times else "12:00"
-            saved_custom_label = custom_times[0]['label'] if custom_times else ""
-            
-            custom_time = st.time_input(
-                "Custom time", 
-                value=datetime.strptime(saved_custom_time, "%H:%M").time(), 
-                key="custom_time"
-            )
-            custom_label = st.text_input(
-                "Custom label", 
-                placeholder="e.g., Lunch, Bedtime", 
-                value=saved_custom_label,
-                key="custom_label"
-            )
-            
-            if custom_label:
-                # Check if custom time overlaps with selected periods
-                custom_hour = custom_time.hour
-                overlap_warning = ""
-                
-                for period_name, period_info in time_periods.items():
-                    if period_name == "Night":
-                        # Special handling for night period (crosses midnight)
-                        if custom_hour >= 22 or custom_hour <= 4:
-                            overlap_warning = f"⚠️ This time overlaps with Night period"
-                    else:
-                        if period_info["min_hour"] <= custom_hour <= period_info["max_hour"]:
-                            overlap_warning = f"⚠️ This time overlaps with {period_name} period"
-                
-                if overlap_warning:
-                    st.warning(overlap_warning)
-                
-                selected_times.append({"time": custom_time.strftime("%H:%M"), "label": custom_label})
-        
-        notes = st.text_area(
-            "Additional Notes (Optional)", 
-            placeholder="e.g., Give with food, Check for side effects",
-            value=get_form_data('notes', ''),
-            key="notes_input"
-        )
-        
-        # Show selected times summary
-        if selected_times:
-            times_summary = ', '.join([f"{t['time']} ({t['label']})" for t in selected_times])
-            st.info(f"📅 Selected times: {times_summary}")
-        
-        # Save form data and generate button
-        if st.button("🔄 Generate QR Reminder Card", type="primary", key="generate_btn"):
-            if pet_name and product_name and selected_times and end_date >= start_date:
-                # Save form data to session state
-                save_form_data(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes)
-                
-                with st.spinner("QR Reminder Card Generation in Progress...."):
-                    success = generate_content(pet_name, product_name, start_date, end_date, frequency, frequency_value, selected_times, notes)
-                    if success:
-                        st.success("✅ QR Reminder Card generated successfully!")
-                        st.rerun()  # Refresh to show generated content
-            elif not selected_times:
-                st.warning("⚠️ Please select at least one reminder time")
-            elif end_date < start_date:
-                st.warning("⚠️ End date must be on or after start date")
-            else:
-                st.warning("⚠️ Please fill in Pet Name and Product Name")
-        
-        # Add a "Clear Form" button to reset everything
-        if st.button("🗑️ Clear Form", key="clear_btn"):
-            # Clear session state
-            st.session_state.form_data = {}
-            st.session_state.generated_content = None
-            st.session_state.content_generated = False
-            st.rerun()
+    # Use session state values as defaults to maintain form data
+    pet_name = st.text_input(
+        "Pet Name", 
+        placeholder="e.g., Daisy, Luna, Charlie",
+        value=get_form_data('pet_name', ''),
+        key="pet_name_input"
+    )
+
+    product_name = "NexGard SPECTRA"
     
-    with col2:
-        st.markdown("<h6 style='text-align: left; font-weight: bold;'>📱 QR Reminder Card</h6>", unsafe_allow_html=True)
-        # Display generated content if available
-        if st.session_state.content_generated and st.session_state.generated_content:
-            display_generated_content()    
+    # Date Range Selection
+    st.markdown("**📅 Reminder Period**")
+    col_start, col_end = st.columns(2)
+    
+    with col_start:
+        start_date = st.date_input(
+            "Start Date",
+            value=get_form_data('start_date', date.today()),
+            min_value=date.today(),
+            help="First day of reminders",
+            key="start_date_input"
+        )
+
+    with col_end:
+        dosage = st.number_input(
+            "Number of Dosages",
+            value = get_form_data('dosage', 12),
+            min_value = 12,
+            help = "Number of Capsules you have",
+            key="number_of_dosage"
+        )
+    
+    # Multiple Times Per Day with Duration Limits
+    st.markdown("**⏰ Reminder Time (Optional)**")
+    
+    # Get saved selected times or use empty list
+    saved_times = get_form_data('selected_time', [])
+    
+    # Option for custom time with validation
+    custom_time_data = saved_times[0] if saved_times else None
+    custom_checked = custom_time_data is not None
+
+    use_custom_time = st.checkbox("🕐 Custom Time", key="custom", value=custom_checked)
+
+    default_time = default_time = datetime.strptime("12:00", "%H:%M").time()
+
+    # Determine the reminder time
+    if use_custom_time:
+        custom_time = st.time_input("Select custom time", value=default_time, key="custom_time")
+        selected_time = custom_time.strftime("%H:%M")
+    else:
+        selected_time = default_time.strftime("%H:%M")
+
+    notes = st.text_area(
+        "Additional Notes (Optional)", 
+        placeholder="e.g., Give with food, Check for side effects",
+        value=get_form_data('notes', ''),
+        key="notes_input"
+    )
+    
+    st.info(f"📅 Reminder Frequency: **Monthly** \t\t 🕛 Reminder time: **{selected_time}**")
+    
+    # Save form data and generate button
+    if st.button("🔄 Submit", type="primary", key="submit_btn"):
+        if pet_name:
+            # Save form data to session state
+            save_form_data(pet_name, product_name, start_date, dosage, selected_time, notes)
+            
+            with st.spinner("Submitting ...."):
+                success = generate_content(pet_name, product_name, start_date, dosage, selected_time, notes)
+                if success:
+                    st.success("✅ Calendar reminder generated successfully!  \n🔀 **Redirecting to Validation Page...**")
+                    web_page_url = st.session_state.generated_content.get("web_page_url")
+                    st.markdown(f"""
+                        <meta http-equiv="refresh" content="2;url={web_page_url}">
+                            """,  
+                            unsafe_allow_html=True)
+                    
+                    # Method 2: Show a redirection html block
+                    
+                    # st.markdown(f"""
+                    #     <meta http-equiv="refresh" content="2;url={web_page_url}">
+                    #     <div style="text-align:center; padding: 50px; background-color: #f0f8f0; border-radius: 10px; margin: 20px 0;">
+                    #         <h2 style="color: #28a745;"> Redirecting to validation page... </h2>
+                    #         <div style="margin: 30px 0;">
+                    #             <div style="display: inline-block; width: 30px; height: 30px; border: 3px solid #28a745; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    #         </div>
+                    #         <style>
+                    #             @keyframes spin {{
+                    #                 0% {{ transofrm: roatate(0deg); }}
+                    #                 100% {{ ransform: rotate(360deg); }}
+                    #             }}
+                    #         </style>
+                    #         """,  
+                    #         unsafe_allow_html=True)
+                    # st.session_state['redirect'] = True
+                    
+                    st.rerun()
         else:
-            st.info("⚠️ Please fill the form and click 'Generate QR Reminder Card'")
+            st.warning("⚠️ Please fill in Pet Name")
+    
+    # Add a "Clear Form" button to reset everything
+    if st.button("🗑️ Clear Form", key="clear_btn"):
+        # Clear session state
+        st.session_state.form_data = {}
+        st.session_state.generated_content = None
+        st.session_state.content_generated = False
+        st.rerun()
+    
 	    
 if __name__ == "__main__":
     main()
