@@ -303,7 +303,7 @@ def upload_reminder_image_to_s3(image_bytes, file_id):
         st.error(f"Error uploading image to S3: {e}")
         return None
 
-def create_web_page_html(pet_name, product_name, calendar_url, reminder_details):
+def create_web_page_html(pet_name, product_name, calendar_url, reminder_details, qr_image_bytes):
     """Create HTML page that serves calendar with device detection"""
     # Base64 encode the web page specific logo
     logo_data_url = ""
@@ -322,6 +322,10 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
         times_html_list += f"• {reminder_details['times']}<br>"
         times_html_list = times_html_list.rstrip('<br>')
     
+    
+    qr_base64 = base64.b64encode(qr_image_bytes).decode()
+
+
     html_content = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -522,6 +526,60 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
             border-radius: 8px;
             border-left: 4px solid #00e47c;
         }}
+
+        /* QR Code section - Simplified for mobile */
+        .qr-section {{
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            border: 3px solid #00e47c;
+        }}
+        
+        .qr-title {{
+            color: #08312a;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }}
+
+        .qr-image {{
+            width: 200px;
+            height: 200px;
+            margin: 10px auto;
+            background-color: #ffffff;
+            border: 2px solid #00e47c;
+            padding: 10px;
+            display: block;
+        }}
+
+         .qr-instructions {{
+            color: #08312a;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 15px 0 10px 0;
+        }}
+        
+        .qr-link {{
+            color: #08312a;
+            margin: 10px 0;
+        }}
+        
+        .qr-link a {{
+            color: #007bff;
+            text-decoration: underline;
+            font-weight: bold;
+            font-size: 14px;
+        }}
+        
+        .scan-tip {{
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin: 15px 0;
+            border-radius: 5px;
+            color: #856404;
+            font-size: 13px;
+        }}
         
         @media (max-width: 480px) {{
             body {{
@@ -603,7 +661,21 @@ def create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
         
         <a href="{calendar_url}" class="btn btn-primary" download="{pet_name.upper()}_{product_name}_reminder.ics">
             📅 Add to My Calendar
-        </a>          
+        </a>
+
+        <!-- QR Code Section -->
+        <div class="qr-section">
+            <div class="qr-title">📱 Scan QR Code</div>
+            <div style="text-align: center; margin: 15px 0;">
+                <img src="data:image/png;base64,{qr_base64}"
+                    alt="QR Code for Pet Reminder"
+                    class="qr-image"
+                    style="width: 200px; height: 200px; display: block; margin: 0 auto; border: 2px solid #00e47c; padding: 10px; background-color: white;" />
+            </div>
+            <div class="qr-link">
+                Can't scan? <a href="{calendar_url}">Click here instead</a>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -910,16 +982,15 @@ def generate_content(pet_name, product_name, start_date, dosage, selected_time, 
             'times': selected_time,
             'notes': notes
         }
-        
+        # Generate QR code (use a fallback URL if web page not available)
+        qr_target = calendar_url if calendar_url else f"data:text/plain,{pet_name} - {product_name} Reminder"
+        qr_image_bytes = generate_qr_code(qr_target)
+
         # Create web page (may be None if S3 not configured)
         web_page_url = None
         if calendar_url:
-            html_content = create_web_page_html(pet_name, product_name, calendar_url, reminder_details)
+            html_content = create_web_page_html(pet_name, product_name, calendar_url, reminder_details, qr_image_bytes)
             web_page_url = upload_web_page_to_s3(html_content, meaningful_id)
-        
-        # Generate QR code (use a fallback URL if web page not available)
-        qr_target = web_page_url if web_page_url else f"data:text/plain,{pet_name} - {product_name} Reminder"
-        qr_image_bytes = generate_qr_code(qr_target)
         
         # Generate the combined reminder image
         reminder_image = create_reminder_image(pet_name, product_name, reminder_details, qr_image_bytes)
